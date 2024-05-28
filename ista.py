@@ -562,6 +562,7 @@ def knot_density_analysis(ista: ISTA, K: int, A: torch.tensor,
     plt.xlim([0,K])
     plt.tight_layout()
     plt.savefig(f"{save_folder}/{save_name}.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"{save_folder}/{save_name}.svg", bbox_inches='tight')
     plt.close()
 
     # give the knot density array back
@@ -904,8 +905,10 @@ def train_lista(lista: LISTA, data_generator, nr_iterations: int, forgetting_fac
         
         if loss_folder is None:
             plt.savefig("loss_plot.jpg", dpi=300, bbox_inches='tight')
+            plt.savefig("loss_plot.svg", bbox_inches='tight')
         else:
             plt.savefig(f"{loss_folder}/loss_plot.jpg", dpi=300, bbox_inches='tight')
+            plt.savefig(f"{loss_folder}/loss_plot.svg", bbox_inches='tight')
 
         if show_loss_plot:
             plt.show()
@@ -978,14 +981,21 @@ def grid_search_ista(A, data_generator, mus: np.array, _lambdas: np.array, K: in
 def support_accuracy(x1: torch.tensor, x2: torch.tensor):
     """
     calculates the accuracy of the support of the x1-vector, and comparing it to the support of the x2-vector.
+
+    inputs:
+    - x1: the x1-vector, of shape (batch_size, N)
+    - x2: the x2-vector, of shape (batch_size, N)
     """
 
     # get the support as all values where x1 or x2 is non-zero
     support_x1 = (x1 != 0).float()
     support_x2 = (x2 != 0).float()
 
-    # calculate the accuracy
-    accuracy = 100 * torch.mean((support_x1 == support_x2)*1.0)
+    # calculate the amount of corrects, which are defined as finding the correct support across all N for a single batch
+    corrects = torch.prod((support_x1 == support_x2)*1.0, dim=1) # this only equals 1 if all elements are equal
+    
+    # accuracy is simply corrects.mean()*100
+    accuracy = corrects.mean()*100
 
     return accuracy
     
@@ -1045,6 +1055,7 @@ def support_accuracy_analysis(ista: ISTA, K: int, A: torch.tensor, y: torch.tens
     plt.xlim([0,K])
     plt.tight_layout()
     plt.savefig(f"{save_folder}/{save_name}.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"{save_folder}/{save_name}.svg", bbox_inches='tight')
     plt.close()
 
     # give the knot density array back
@@ -1177,6 +1188,7 @@ if __name__ == "__main__":
         plt.legend()
         plt.tight_layout()
         plt.savefig("hyperplane_analysis_figures/united_nr_regions_over_iterations.png", dpi=300, bbox_inches='tight')
+        plt.savefig("hyperplane_analysis_figures/united_nr_regions_over_iterations.svg", bbox_inches='tight')
         plt.close()
 
     if test_ista_randomly and test_lista_randomly:
@@ -1190,6 +1202,7 @@ if __name__ == "__main__":
         plt.legend()
         plt.tight_layout()
         plt.savefig("random_analysis_figures/united_nr_regions_over_iterations_random.png", dpi=300, bbox_inches='tight')
+        plt.savefig("random_analysis_figures/united_nr_regions_over_iterations_random.svg", bbox_inches='tight')
         plt.close()
 
     if test_ista_knot_density and test_lista_knot_density:
@@ -1209,4 +1222,5 @@ if __name__ == "__main__":
         plt.xlim([0,K_max])
         plt.tight_layout()
         plt.savefig("knot_density_figures/united_knot_density_over_iterations.png", dpi=300, bbox_inches='tight')
+        plt.savefig("knot_density_figures/united_knot_density_over_iterations.svg", bbox_inches='tight')
         plt.close()

@@ -27,7 +27,9 @@ sys.path.append(os.path.dirname(SCRIPT_DIR))
 torch.random.manual_seed(0)
 
 # %% create a plotting function
-def plot_df_as_parallel_coordinates(df, collumns_to_plot, color_collumn, perturbation_collumns = [], logaritmic_collumns = [], title = None, host = None): #NOSONAR
+def plot_df_as_parallel_coordinates(df, collumns_to_plot, color_collumn, 
+                                    perturbation_collumns = [], same_y_scale_collumns = [[]], accuracy_scale_collumns =[], logaritmic_collumns = [], 
+                                    title = None, host = None): #NOSONAR
     """
     This function plots a dataframe as a parallel coordinates plot, with bezier curves instead of straight lines.
     The dataframe should have the collumns to plot in the right order.
@@ -37,6 +39,8 @@ def plot_df_as_parallel_coordinates(df, collumns_to_plot, color_collumn, perturb
         collumns_to_plot: list of collumns to plot in the right order
         color_collumn: name of the collumn to use for the color of the lines
         perturbation_collumns: list of collumns to always add a small bit of noise to
+        same_y_scale_collumns: list of list with the second list containing the collumns that should have the same y scale
+        accuracy_scale_collumns: list of collumns that should be scaled between 0 and 100
         logaritmic_collumns: list of collumns to plot on a logaritmic scale
         title: title of the plot
         host: host of the plot, if None, a new figure is created
@@ -64,9 +68,23 @@ def plot_df_as_parallel_coordinates(df, collumns_to_plot, color_collumn, perturb
     ymaxs = ys.max(axis=0)
     dys   = ymaxs - ymins
 
-    # find if a collumn is named accuracy or kappa, in which case we change ymins and ymaxs to 0 and 1 or 0 and 100
-    if "support_accuracy_ista_end" in collumns_to_plot or "support_accuracy_lista_end" in collumns_to_plot:
-        accuracy_idx = collumns_to_plot.index("support_accuracy_ista_end") if "support_accuracy_ista_end" in collumns_to_plot else collumns_to_plot.index("support_accuracy_lista_end")
+    # find the collumns that should have the same y scale, make them have the largest y scale of the group (most min and most max)
+    for same_y_scale_group in same_y_scale_collumns:
+        # get the idxs
+        same_y_scale_group_indices = [collumns_to_plot.index(x) for x in same_y_scale_group]
+        # get the values
+        ymins_group = ymins[same_y_scale_group_indices]
+        ymaxs_group = ymaxs[same_y_scale_group_indices]
+        # set the values to the largest values
+        ymins[same_y_scale_group_indices] = ymins_group.min()
+        ymaxs[same_y_scale_group_indices] = ymaxs_group.max()
+        dys[same_y_scale_group_indices] = ymaxs[same_y_scale_group_indices] - ymins[same_y_scale_group_indices]
+
+
+    #  all collumns that should be scaled between 0 and 100
+    for accuracy in accuracy_scale_collumns:
+        accuracy_idx = collumns_to_plot.index(accuracy)
+        
         # set the ymins and ymaxs
         ymins[accuracy_idx] = 0
         ymaxs[accuracy_idx] = 100
@@ -148,6 +166,8 @@ def plot_df_as_parallel_coordinates(df, collumns_to_plot, color_collumn, perturb
     collum_names = [x.replace("knot_density_ista_end",  "End Knot Density") for x in collum_names]
     collum_names = [x.replace("knot_density_lista_max", "Max Knot Density") for x in collum_names]
     collum_names = [x.replace("knot_density_lista_end", "End Knot Density") for x in collum_names]
+    collum_names = [x.replace("support_accuracy_ista_end_ood",  "Support Accuracy OOD") for x in collum_names]
+    collum_names = [x.replace("support_accuracy_lista_end_ood", "Support Accuracy OOD") for x in collum_names]
     collum_names = [x.replace("support_accuracy_ista_end",  "Support Accuracy") for x in collum_names]
     collum_names = [x.replace("support_accuracy_lista_end", "Support Accuracy") for x in collum_names]
 

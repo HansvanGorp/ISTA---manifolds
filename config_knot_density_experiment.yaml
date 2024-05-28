@@ -3,7 +3,7 @@
 
 # general parameters
 device: "cuda:0" # device to run the experiment on
-results_dir: "test" # folder to save the results in
+results_dir: "test_with_fixed_M8_N16_K4" # folder to save the results in
 seed: 0 # seed for reproducibility
 max_nr_of_experiments: 64 # maximum number of experiments to run
 
@@ -12,19 +12,21 @@ max_nr_of_experiments: 64 # maximum number of experiments to run
 # we also have some noise in the data according to y=Ax+noise with the noise~N(0, noise_std**2)
 data_that_varies:
   M:
-    min: 1
-    max: 16
+    min: 8
+    max: 8
   N:
-    min: 1
+    min: 16
     max: 16
   K:
-    min: 1
-    max: 16
+    min: 4
+    max: 4
   noise_std: [0.1]
 
 data_that_stays_constant:
   x_magnitude: [1,2]
-  noise_std: 0.1
+  noise_std: 0.01
+  x_magnitude_ood: [3,4]
+  noise_std_ood: 0.1
 
 # support accuracy
 support_accuracy_nr_points_to_use: 2048 
@@ -41,7 +43,7 @@ ISTA:
     max: 1
     nr_points: 10
   nr_points_to_use: 4096
-  weighting_for_first_fold: 0.01 # the first fold is weighted by this factor, increasing to the last fold, which is always weighted by 1 (if 1, all folds are equally weighted)
+  weighting_for_first_fold: 1 # the first fold is weighted by this factor, increasing to the last fold, which is always weighted by 1 (if 1, all folds are equally weighted)
 
 # LISTA parameters
 LISTA:
@@ -49,8 +51,8 @@ LISTA:
   batch_size: 512
   nr_of_batches: 8192
   learning_rate: 0.001
-  weighting_for_first_fold: 0.01 # the first fold is weighted by this factor, increasing to the last fold, which is always weighted by 1 (if 1, all folds are equally weighted)
-  patience: 512
+  weighting_for_first_fold: 1 # the first fold is weighted by this factor, increasing to the last fold, which is always weighted by 1 (if 1, all folds are equally weighted)
+  patience: 1024
 
 # Path parameters
 Path:

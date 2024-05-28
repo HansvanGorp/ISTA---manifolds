@@ -84,6 +84,8 @@ ista_knot_density_over_experiments  = []
 lista_knot_density_over_experiments = []
 ista_support_accuracy_over_experiments = []
 lista_support_accuracy_over_experiments = []
+ista_support_accuracy_over_experiments_ood = []
+lista_support_accuracy_over_experiments_ood = []
 losses_over_experiments = []
 
 # initiale the df for the parallel coordinates plot, each row will be an experiment
@@ -109,7 +111,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     torch.save(A, os.path.join(results_dir_this_experiment, "A.tar"))
 
     # perform grid search on ISTA for the best lambda and mu for these parameters
-    data_generator_initialized = lambda: ista.data_generator(A, config["ISTA"]["nr_points_to_use"], K, config["data_that_stays_constant"]["x_magnitude"], N, config["device"])
+    data_generator_initialized = lambda: ista.data_generator(A, config["ISTA"]["nr_points_to_use"], K, config["data_that_stays_constant"]["x_magnitude"], N, config["device"], noise_std = config["data_that_stays_constant"]["noise_std"])
     mus = torch.linspace(config["ISTA"]["mu"]["min"], config["ISTA"]["mu"]["max"], config["ISTA"]["mu"]["nr_points"])
     _lambdas = torch.linspace(config["ISTA"]["lambda"]["min"], config["ISTA"]["lambda"]["max"], config["ISTA"]["lambda"]["nr_points"])
     mu, _lambda = ista.grid_search_ista(A, data_generator_initialized, mus, _lambdas, config["ISTA"]["nr_folds"], forgetting_factor = config["ISTA"]["weighting_for_first_fold"], device=config["device"],
@@ -124,7 +126,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     model_lista = ista.LISTA(A, mu = mu, _lambda= _lambda, K = config["LISTA"]["nr_folds"], device = config["device"], initialize_randomly = False)
 
     # train LISTA
-    data_generator_initialized = lambda: ista.data_generator(A, config["LISTA"]["batch_size"], K, config["data_that_stays_constant"]["x_magnitude"], N, config["device"])
+    data_generator_initialized = lambda: ista.data_generator(A, config["LISTA"]["batch_size"], K, config["data_that_stays_constant"]["x_magnitude"], N, config["device"], noise_std = config["data_that_stays_constant"]["noise_std"])
     model_lista,losses = ista.train_lista(model_lista, data_generator_initialized, config["LISTA"]["nr_of_batches"], config["LISTA"]["weighting_for_first_fold"],  config["LISTA"]["learning_rate"],
                                           patience= config["LISTA"]["patience"], show_loss_plot = False, tqdm_position=1, verbose=True, tqdm_leave=tqdm_leave, loss_folder =results_dir_this_experiment)
     
@@ -176,6 +178,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     plt.xlim([0,max_folds])
     plt.tight_layout()
     plt.savefig(os.path.join(results_dir_this_experiment, "knot_density_ISTA_and_LISTA.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(results_dir_this_experiment, "knot_density_ISTA_and_LISTA.svg"), bbox_inches='tight')
     plt.close()
 
     # store the knot densities in the lists
@@ -183,11 +186,18 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     lista_knot_density_over_experiments.append(knot_density_lista.cpu())
 
     # %% support reconstruction accuracy over the folds
-    y, x = ista.data_generator(A, config["support_accuracy_nr_points_to_use"],  K, config["data_that_stays_constant"]["x_magnitude"], N, config["device"])
+    y, x         = ista.data_generator(A, config["support_accuracy_nr_points_to_use"],  K, config["data_that_stays_constant"]["x_magnitude"],     N, config["device"], noise_std = config["data_that_stays_constant"]["noise_std"])
+    y_ood, x_ood = ista.data_generator(A, config["support_accuracy_nr_points_to_use"],  K, config["data_that_stays_constant"]["x_magnitude_ood"], N, config["device"], noise_std = config["data_that_stays_constant"]["noise_std_ood"])
 
     support_accuracy_ista = ista.support_accuracy_analysis( model_ista, config["ISTA"]["nr_folds"],  A, y, x,
                                                             save_folder = results_dir_this_experiment,
                                                             save_name = "support_accuracy_ISTA", 
+                                                            verbose = True, color = 'tab:blue',
+                                                            tqdm_position=1, tqdm_leave=tqdm_leave)
+    
+    support_accuracy_ista_ood = ista.support_accuracy_analysis( model_ista, config["ISTA"]["nr_folds"],  A, y_ood, x_ood,
+                                                            save_folder = results_dir_this_experiment,
+                                                            save_name = "support_accuracy_ISTA_ood", 
                                                             verbose = True, color = 'tab:blue',
                                                             tqdm_position=1, tqdm_leave=tqdm_leave)
     
@@ -197,14 +207,23 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
                                                             verbose = True, color = 'tab:orange',
                                                             tqdm_position=1, tqdm_leave=tqdm_leave)
     
-    # make a joint plot of the knot densities
+    support_accuracy_lista_ood = ista.support_accuracy_analysis(model_lista, config["LISTA"]["nr_folds"], A, y_ood, x_ood,
+                                                            save_folder = results_dir_this_experiment,
+                                                            save_name = "support_accuracy_LISTA_ood", 
+                                                            verbose = True, color = 'tab:orange',
+                                                            tqdm_position=1, tqdm_leave=tqdm_leave)
+    
+    
+    # make a joint plot of the support accuracies
     max_folds = max(config["ISTA"]["nr_folds"], config["LISTA"]["nr_folds"])
     folds_ista = np.arange(0,config["ISTA"]["nr_folds"]+1)
     folds_lista = np.arange(0,config["LISTA"]["nr_folds"]+1)
 
     plt.figure()
-    plt.plot(folds_ista,support_accuracy_ista,  '-', label = "ISTA",  c = 'tab:blue')
-    plt.plot(folds_lista,support_accuracy_lista,'-', label = "LISTA", c = 'tab:orange')
+    plt.plot(folds_ista,support_accuracy_ista,      '-',  label = "ISTA",     c = 'tab:blue')
+    plt.plot(folds_lista,support_accuracy_ista_ood, '--', label = "ISTA OOD", c = 'tab:blue')
+    plt.plot(folds_lista,support_accuracy_lista,    '-',  label = "LISTA",    c = 'tab:orange')
+    plt.plot(folds_lista,support_accuracy_lista_ood,'--', label = "LISTA OOD",c = 'tab:orange')
     plt.grid()
     plt.xlabel("fold")
     plt.ylabel("support accuracy")
@@ -212,15 +231,20 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     plt.xlim([0,max_folds])
     plt.tight_layout()
     plt.savefig(os.path.join(results_dir_this_experiment, "support_accuracy_ISTA_and_LISTA.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(results_dir_this_experiment, "support_accuracy_ISTA_and_LISTA.svg"), bbox_inches='tight')
     plt.close()
 
     # save the support accuracies in a .tar file
     torch.save(support_accuracy_ista,  os.path.join(results_dir_this_experiment, "support_accuracy_ISTA.tar"))
     torch.save(support_accuracy_lista, os.path.join(results_dir_this_experiment, "support_accuracy_LISTA.tar"))
+    torch.save(support_accuracy_ista_ood,  os.path.join(results_dir_this_experiment, "support_accuracy_ISTA_ood.tar"))
+    torch.save(support_accuracy_lista_ood, os.path.join(results_dir_this_experiment, "support_accuracy_LISTA_ood.tar"))
 
     # store the support accuracies in the lists
     ista_support_accuracy_over_experiments.append(support_accuracy_ista.cpu())
     lista_support_accuracy_over_experiments.append(support_accuracy_lista.cpu())
+    ista_support_accuracy_over_experiments_ood.append(support_accuracy_ista_ood.cpu())
+    lista_support_accuracy_over_experiments_ood.append(support_accuracy_lista_ood.cpu())
 
     # %%
     """
@@ -249,6 +273,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     plt.title("mean and std of the knot density per fold over the random experiments")
     plt.tight_layout()
     plt.savefig(os.path.join(results_dir_with_parent, "knot_density_ISTA_and_LISTA_over_experiments.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(results_dir_with_parent, "knot_density_ISTA_and_LISTA_over_experiments.svg"), bbox_inches='tight')
     plt.close()
 
     # %% plot the losses over the experiments
@@ -267,6 +292,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     plt.title("mean and std of the loss over the random experiments")
     plt.tight_layout()
     plt.savefig(os.path.join(results_dir_with_parent, "loss_over_experiments.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(results_dir_with_parent, "loss_over_experiments.svg"), bbox_inches='tight')
     plt.close()
 
     # %% plot the support accuracy over the experiments
@@ -276,10 +302,21 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     lista_mean_over_experiments = torch.stack(lista_support_accuracy_over_experiments).mean(dim=0)
     lista_std_over_experiments  = torch.stack(lista_support_accuracy_over_experiments).std(dim=0)
 
+    ista_mean_over_experiments_ood  = torch.stack(ista_support_accuracy_over_experiments_ood).mean(dim=0)
+    ista_std_over_experiments_ood   = torch.stack(ista_support_accuracy_over_experiments_ood).std(dim=0)
+    lista_mean_over_experiments_ood = torch.stack(lista_support_accuracy_over_experiments_ood).mean(dim=0)
+    lista_std_over_experiments_ood  = torch.stack(lista_support_accuracy_over_experiments_ood).std(dim=0)
+
     plt.plot(folds_ista, ista_mean_over_experiments, '-', c = 'tab:blue', label = "ISTA")
     plt.fill_between(folds_ista, ista_mean_over_experiments - ista_std_over_experiments, ista_mean_over_experiments + ista_std_over_experiments, alpha=0.3, color='tab:blue')
     plt.plot(folds_lista, lista_mean_over_experiments, '-', c = 'tab:orange', label = "LISTA")
     plt.fill_between(folds_lista, lista_mean_over_experiments - lista_std_over_experiments, lista_mean_over_experiments + lista_std_over_experiments, alpha=0.3, color='tab:orange')
+
+    plt.plot(folds_ista, ista_mean_over_experiments_ood, '--', c = 'tab:blue', label = "ISTA OOD")
+    plt.fill_between(folds_ista, ista_mean_over_experiments_ood - ista_std_over_experiments_ood, ista_mean_over_experiments_ood + ista_std_over_experiments_ood, alpha=0.3, color='tab:blue')
+    plt.plot(folds_lista, lista_mean_over_experiments_ood, '--', c = 'tab:orange', label = "LISTA OOD")
+    plt.fill_between(folds_lista, lista_mean_over_experiments_ood - lista_std_over_experiments_ood, lista_mean_over_experiments_ood + lista_std_over_experiments_ood, alpha=0.3, color='tab:orange')
+
     plt.grid()
     plt.xlabel("fold")
     plt.ylabel("support accuracy")
@@ -288,62 +325,89 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     plt.title("mean and std of the support accuracy per fold over the random experiments")
     plt.tight_layout()
     plt.savefig(os.path.join(results_dir_with_parent, "support_accuracy_ISTA_and_LISTA_over_experiments.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(results_dir_with_parent, "support_accuracy_ISTA_and_LISTA_over_experiments.svg"), bbox_inches='tight')
     plt.close()
 
 
     # %% make a parralel coordinate plot of the parameters
     # we want to plot the following parameters: M, N, K, noise_std, mu, lambda, knot_density_ista_max,  knot_density_ista_end, knot_density_lista_max, knot_density_lista_end
-    #                                           support_accuracy_ista_end, support_accuracy_lista_end
+    #                                           support_accuracy_ista_end, support_accuracy_lista_end, support_accuracy_ista_end_ood, support_accuracy_lista_end_ood
 
     # step_1, add a new row to the df with the parameters of this experiment
     new_row = pd.DataFrame({"M": M, "N": N, "K": K, "noise_std": noise_std, "mu": mu.cpu().item(), "lambda": _lambda.cpu().item(), 
                             "knot_density_ista_max": knot_density_ista.max().cpu().item(), "knot_density_ista_end": knot_density_ista[-1].cpu().item(),
                             "knot_density_lista_max": knot_density_lista.max().cpu().item(), "knot_density_lista_end": knot_density_lista[-1].cpu().item(),
-                            "support_accuracy_ista_end": support_accuracy_ista[-1].cpu().item(), "support_accuracy_lista_end": support_accuracy_lista[-1].cpu().item()
+                            "support_accuracy_ista_end": support_accuracy_ista[-1].cpu().item(), "support_accuracy_lista_end": support_accuracy_lista[-1].cpu().item(),
+                            "support_accuracy_ista_end_ood": support_accuracy_ista_ood[-1].cpu().item(), "support_accuracy_lista_end_ood": support_accuracy_lista_ood[-1].cpu().item()
                             }, index=[0])
     
     df = pd.concat([df, new_row], ignore_index=True)
 
     # step_2, plot the df for ISTa and LISTA
     # ISTA
-    fig, ax = plt.subplots(1,1, figsize=(20,10))
-    plot_df_as_parallel_coordinates(df, ["M", "N", "K", "knot_density_ista_max",  "knot_density_ista_end", "support_accuracy_ista_end"], 
-                                    "support_accuracy_ista_end", host = ax, title="ISTA",
-                                    perturbation_collumns = ["M", "N", "K"])    
+    fig, ax = plt.subplots(1,1, figsize=(16,8))
+    plot_df_as_parallel_coordinates(df, ["K", "M", "N", "knot_density_ista_max",  "knot_density_ista_end", "support_accuracy_ista_end","support_accuracy_ista_end_ood"], 
+                                    "support_accuracy_ista_end_ood",
+                                    host = ax, title="ISTA",
+                                    perturbation_collumns = ["K", "M", "N"], 
+                                    same_y_scale_collumns = [["K", "M", "N"],["knot_density_ista_max",  "knot_density_ista_end"]],
+                                    accuracy_scale_collumns = ["support_accuracy_ista_end", "support_accuracy_ista_end_ood"])    
     plt.tight_layout()
     plt.savefig(os.path.join(results_dir_with_parent, "parallel_coordinates_ISTA.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(results_dir_with_parent, "parallel_coordinates_ISTA.svg"), bbox_inches='tight')
     plt.close()
 
     # LISTA
-    fig, ax = plt.subplots(1,1, figsize=(20,10))
-    plot_df_as_parallel_coordinates(df, ["M", "N", "K", "knot_density_lista_max", "knot_density_lista_end", "support_accuracy_lista_end"], 
-                                    "support_accuracy_lista_end", host = ax, title="LISTA",
-                                    perturbation_collumns = ["M", "N", "K"])    
+    fig, ax = plt.subplots(1,1, figsize=(16,8))
+    plot_df_as_parallel_coordinates(df, ["K", "M", "N", "knot_density_lista_max", "knot_density_lista_end", "support_accuracy_lista_end","support_accuracy_lista_end_ood"], 
+                                    "support_accuracy_lista_end_ood",
+                                    host = ax, title="LISTA",
+                                    perturbation_collumns = ["K", "M", "N"], 
+                                    same_y_scale_collumns = [["K", "M", "N"],["knot_density_lista_max",  "knot_density_lista_end"]],
+                                    accuracy_scale_collumns = ["support_accuracy_lista_end", "support_accuracy_lista_end_ood"])      
     plt.tight_layout()
     plt.savefig(os.path.join(results_dir_with_parent, "parallel_coordinates_LISTA.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(results_dir_with_parent, "parallel_coordinates_LISTA.svg"), bbox_inches='tight')
     plt.close()
 
     # save the df to a .csv file
     df.to_csv(os.path.join(results_dir_with_parent, "parameters.csv"))
 
 
-    # %% make a scatter plot with a pareto curve, with on the x-axis the max knot_density and on the y-axis the end knot density, do this for ISTA and LISTA
+    # %% make a scatter plot ith on the x-axis the max knot_density and on the y-axis the end knot density, do this for ISTA and LISTA
     # get the data from the df for the scatter plot
     knot_density_ista_max = df["knot_density_ista_max"].to_numpy()
     knot_density_ista_end = df["knot_density_ista_end"].to_numpy()
 
     knot_density_lista_max = df["knot_density_lista_max"].to_numpy()
     knot_density_lista_end = df["knot_density_lista_end"].to_numpy()
+
+    # get the min and max values of the data
+    minimum = min(knot_density_ista_max.min(), knot_density_ista_end.min(), knot_density_lista_max.min(), knot_density_lista_end.min())
+    maximum = max(knot_density_ista_max.max(), knot_density_ista_end.max(), knot_density_lista_max.max(), knot_density_lista_end.max())
+    delta   = (maximum-minimum)
+
+    if delta == 0:
+        delta = 1 # if the min and max values are the same, set the delta to 1
+
+    # add 5% to the min and max values
+    minimum -= 0.05*delta
+    maximum += 0.05*delta
+
     
     # the plot
-    plt.figure(figsize=(10,10))
+    plt.figure(figsize=(6,6))
     plt.scatter(knot_density_ista_max, knot_density_ista_end, c='tab:blue', label="ISTA")
     plt.scatter(knot_density_lista_max, knot_density_lista_end, c='tab:orange', label="LISTA")
+    plt.plot([minimum, maximum], [minimum, maximum], '--', c='black')
+    plt.xlim(minimum, maximum)
+    plt.ylim(minimum, maximum)
     plt.xlabel("max knot density")
     plt.ylabel("end knot density")
     plt.legend(loc='best')
     plt.grid()
     plt.tight_layout()
     plt.savefig(os.path.join(results_dir_with_parent, "scatter_plot_knot_density_max_vs_end.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(results_dir_with_parent, "scatter_plot_knot_density_max_vs_end.svg"), bbox_inches='tight')
     plt.close()
     
