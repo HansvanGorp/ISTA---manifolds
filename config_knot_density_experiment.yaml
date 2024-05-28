@@ -1,0 +1,62 @@
+---
+# this yaml file contains the settings used for the knot density experiment
+
+# general parameters
+device: "cuda:0" # device to run the experiment on
+results_dir: "test" # folder to save the results in
+seed: 0 # seed for reproducibility
+max_nr_of_experiments: 64 # maximum number of experiments to run
+
+# we want to run the experiment in different contexts of dimension sizes and sparsity levels of x
+# y dimension M, x dimension N, sparsity in x of K, each described by a range
+# we also have some noise in the data according to y=Ax+noise with the noise~N(0, noise_std**2)
+data_that_varies:
+  M:
+    min: 1
+    max: 16
+  N:
+    min: 1
+    max: 16
+  K:
+    min: 1
+    max: 16
+  noise_std: [0.1]
+
+data_that_stays_constant:
+  x_magnitude: [1,2]
+  noise_std: 0.1
+
+# support accuracy
+support_accuracy_nr_points_to_use: 2048 
+
+# ISTA parameters
+ISTA:
+  nr_folds: 2048
+  mu:
+    min: 0.1
+    max: 2
+    nr_points: 20
+  lambda:
+    min: 0.1
+    max: 1
+    nr_points: 10
+  nr_points_to_use: 4096
+  weighting_for_first_fold: 0.01 # the first fold is weighted by this factor, increasing to the last fold, which is always weighted by 1 (if 1, all folds are equally weighted)
+
+# LISTA parameters
+LISTA:
+  nr_folds: 2048
+  batch_size: 512
+  nr_of_batches: 8192
+  learning_rate: 0.001
+  weighting_for_first_fold: 0.01 # the first fold is weighted by this factor, increasing to the last fold, which is always weighted by 1 (if 1, all folds are equally weighted)
+  patience: 512
+
+# Path parameters
+Path:
+  nr_paths: 1 # number of paths to generate
+  anchor_point_std: 1 # standard deviation of the anchor points, where the path will bounce between
+  nr_points_along_path: 1048576 # 2^20
+  path_delta: 0.001
+
+    
