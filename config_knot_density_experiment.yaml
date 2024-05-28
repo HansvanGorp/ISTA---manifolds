@@ -3,7 +3,7 @@
 
 # general parameters
 device: "cuda:0" # device to run the experiment on
-results_dir: "test_with_fixed_M8_N16_K4" # folder to save the results in
+results_dir: "test_with_changing_M_N_K" # folder to save the results in
 seed: 0 # seed for reproducibility
 max_nr_of_experiments: 64 # maximum number of experiments to run
 
@@ -11,16 +11,15 @@ max_nr_of_experiments: 64 # maximum number of experiments to run
 # y dimension M, x dimension N, sparsity in x of K, each described by a range
 # we also have some noise in the data according to y=Ax+noise with the noise~N(0, noise_std**2)
 data_that_varies:
-  M:
-    min: 8
-    max: 8
-  N:
-    min: 16
-    max: 16
   K:
-    min: 4
-    max: 4
-  noise_std: [0.1]
+    min: 1
+    max: 16
+  M:
+    min: 1
+    max: 16
+  N:
+    min: 1
+    max: 16
 
 data_that_stays_constant:
   x_magnitude: [1,2]

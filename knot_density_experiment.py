@@ -33,8 +33,6 @@ def sample_experiment(config):
         M = torch.randint(config["data_that_varies"]["M"]["min"], config["data_that_varies"]["M"]["max"] + 1, (1,)).item()
         N = torch.randint(config["data_that_varies"]["N"]["min"], config["data_that_varies"]["N"]["max"] + 1, (1,)).item()
         K = torch.randint(config["data_that_varies"]["K"]["min"], config["data_that_varies"]["K"]["max"] + 1, (1,)).item()
-        nr_noise_std = len(config["data_that_varies"]["noise_std"])
-        noise_std = config["data_that_varies"]["noise_std"][torch.randint(0, nr_noise_std, (1,)).item()]
 
         # check if the parameters are valid
         if M <= N and K <= M:
@@ -43,7 +41,7 @@ def sample_experiment(config):
     # create the A matrix that belongs to these parameters
     A = ista.create_random_matrix_with_good_singular_values(M, N)
     
-    return M, N, K, noise_std, A
+    return M, N, K, A
 
 
 # %% load the configuration file
@@ -97,7 +95,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     tqdm_leave = False if experiment_id < config["max_nr_of_experiments"]-1 else True # set tqdm_leave to False if this is not the last experiment
     
     # sample the parameters for the experiment that vary, untill a valid experiment is found
-    M, N, K, noise_std, A = sample_experiment(config)
+    M, N, K, A = sample_experiment(config)
 
     # create the directory for the experiment
     results_dir_this_experiment = os.path.join(results_dir_with_parent, str(experiment_id))
@@ -105,7 +103,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
 
     # save the parameters of the experiment in a .yaml file in the experiment folder/str(experiment_id)
     with open(os.path.join(results_dir_this_experiment, "parameters.yaml"), 'w') as file:
-        yaml.dump({"M": M, "N": N, "K": K, "noise_std": noise_std}, file)
+        yaml.dump({"M": M, "N": N, "K": K}, file)
 
     # save the A matrix in a .tar file
     torch.save(A, os.path.join(results_dir_this_experiment, "A.tar"))
