@@ -196,7 +196,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     support_accuracy_ista_ood = ista.support_accuracy_analysis( model_ista, config["ISTA"]["nr_folds"],  A, y_ood, x_ood,
                                                             save_folder = results_dir_this_experiment,
                                                             save_name = "support_accuracy_ISTA_ood", 
-                                                            verbose = True, color = 'tab:blue',
+                                                            verbose = True, color = 'tab:green',
                                                             tqdm_position=1, tqdm_leave=tqdm_leave)
     
     support_accuracy_lista = ista.support_accuracy_analysis(model_lista, config["LISTA"]["nr_folds"], A, y, x,
@@ -208,7 +208,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     support_accuracy_lista_ood = ista.support_accuracy_analysis(model_lista, config["LISTA"]["nr_folds"], A, y_ood, x_ood,
                                                             save_folder = results_dir_this_experiment,
                                                             save_name = "support_accuracy_LISTA_ood", 
-                                                            verbose = True, color = 'tab:orange',
+                                                            verbose = True, color = 'tab:red',
                                                             tqdm_position=1, tqdm_leave=tqdm_leave)
     
     
@@ -219,9 +219,9 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
 
     plt.figure()
     plt.plot(folds_ista,support_accuracy_ista,      '-',  label = "ISTA",     c = 'tab:blue')
-    plt.plot(folds_lista,support_accuracy_ista_ood, '--', label = "ISTA OOD", c = 'tab:blue')
+    plt.plot(folds_ista,support_accuracy_ista_ood,  '--', label = "ISTA OOD", c = 'tab:green')
     plt.plot(folds_lista,support_accuracy_lista,    '-',  label = "LISTA",    c = 'tab:orange')
-    plt.plot(folds_lista,support_accuracy_lista_ood,'--', label = "LISTA OOD",c = 'tab:orange')
+    plt.plot(folds_lista,support_accuracy_lista_ood,'--', label = "LISTA OOD",c = 'tab:red')
     plt.grid()
     plt.xlabel("fold")
     plt.ylabel("support accuracy")
@@ -280,13 +280,22 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     losses_mean_over_experiments = torch.stack(losses_over_experiments).mean(dim=0)
     losses_std_over_experiments = torch.stack(losses_over_experiments).std(dim=0)
 
+    if torch.isnan(losses_std_over_experiments).any():
+        losses_std_over_experiments = torch.zeros_like(losses_mean_over_experiments)
+
+    ymax = torch.quantile(losses_mean_over_experiments + losses_std_over_experiments, 0.95).item()
+    ymin = torch.quantile(losses_mean_over_experiments - losses_std_over_experiments, 0.05).item()
+    y_diff = ymax - ymin
+    ymax += 0.5*y_diff
+    ymin -= 0.5*y_diff
+
     plt.plot(batches,losses_mean_over_experiments, '-', c = 'tab:blue', label = "loss")
     plt.fill_between(batches, losses_mean_over_experiments - losses_std_over_experiments, losses_mean_over_experiments + losses_std_over_experiments, alpha=0.3, color='tab:blue')
     plt.grid()
     plt.xlabel("batch")
     plt.ylabel("loss")
-    plt.ylim(0,0.15)
     plt.xlim(1,len(losses_over_experiments[0]))
+    plt.ylim(ymin, ymax)
     plt.title("mean and std of the loss over the random experiments")
     plt.tight_layout()
     plt.savefig(os.path.join(results_dir_with_parent, "loss_over_experiments.png"), dpi=300, bbox_inches='tight')
@@ -310,10 +319,10 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     plt.plot(folds_lista, lista_mean_over_experiments, '-', c = 'tab:orange', label = "LISTA")
     plt.fill_between(folds_lista, lista_mean_over_experiments - lista_std_over_experiments, lista_mean_over_experiments + lista_std_over_experiments, alpha=0.3, color='tab:orange')
 
-    plt.plot(folds_ista, ista_mean_over_experiments_ood, '--', c = 'tab:blue', label = "ISTA OOD")
-    plt.fill_between(folds_ista, ista_mean_over_experiments_ood - ista_std_over_experiments_ood, ista_mean_over_experiments_ood + ista_std_over_experiments_ood, alpha=0.3, color='tab:blue')
-    plt.plot(folds_lista, lista_mean_over_experiments_ood, '--', c = 'tab:orange', label = "LISTA OOD")
-    plt.fill_between(folds_lista, lista_mean_over_experiments_ood - lista_std_over_experiments_ood, lista_mean_over_experiments_ood + lista_std_over_experiments_ood, alpha=0.3, color='tab:orange')
+    plt.plot(folds_ista, ista_mean_over_experiments_ood, '--', c = 'tab:green', label = "ISTA OOD")
+    plt.fill_between(folds_ista, ista_mean_over_experiments_ood - ista_std_over_experiments_ood, ista_mean_over_experiments_ood + ista_std_over_experiments_ood, alpha=0.3, color='tab:green')
+    plt.plot(folds_lista, lista_mean_over_experiments_ood, '--', c = 'tab:red', label = "LISTA OOD")
+    plt.fill_between(folds_lista, lista_mean_over_experiments_ood - lista_std_over_experiments_ood, lista_mean_over_experiments_ood + lista_std_over_experiments_ood, alpha=0.3, color='tab:red')
 
     plt.grid()
     plt.xlabel("fold")
@@ -332,7 +341,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     #                                           support_accuracy_ista_end, support_accuracy_lista_end, support_accuracy_ista_end_ood, support_accuracy_lista_end_ood
 
     # step_1, add a new row to the df with the parameters of this experiment
-    new_row = pd.DataFrame({"M": M, "N": N, "K": K, "noise_std": noise_std, "mu": mu.cpu().item(), "lambda": _lambda.cpu().item(), 
+    new_row = pd.DataFrame({"M": M, "N": N, "K": K, "mu": mu.cpu().item(), "lambda": _lambda.cpu().item(), 
                             "knot_density_ista_max": knot_density_ista.max().cpu().item(), "knot_density_ista_end": knot_density_ista[-1].cpu().item(),
                             "knot_density_lista_max": knot_density_lista.max().cpu().item(), "knot_density_lista_end": knot_density_lista[-1].cpu().item(),
                             "support_accuracy_ista_end": support_accuracy_ista[-1].cpu().item(), "support_accuracy_lista_end": support_accuracy_lista[-1].cpu().item(),

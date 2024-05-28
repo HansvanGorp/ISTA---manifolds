@@ -192,7 +192,7 @@ class ISTAPrototype(torch.nn.Module):
         # return the result
         return x, jacobian
     
-    def soft_thresholding(self, x: torch.tensor, k: int, jacobian: torch.tensor = None):
+    def soft_thresholding(self, x: torch.tensor, k: int, jacobian: torch.tensor = None, max_clip: float = 10):
         """
         Implements the soft thresholding step of the ISTA algorithm.
 
@@ -200,6 +200,7 @@ class ISTAPrototype(torch.nn.Module):
         - x (torch.tensor): the current x, of shape (batch_size, N)
         - k (int): the current iteration (this is needed to get the correct lambda value)
         - jacobian (torch.tensor): the Jacobian of the forward function, of shape (batch_size, N, M) (if None, it is not calculated)
+        - max_clip (float): the maximum magnitude value to clip x to (to prevent numerical instability)
         """
         # get lambda at the current iteration
         _lambda = self.get_lambda_at_iteration(k)
@@ -207,7 +208,7 @@ class ISTAPrototype(torch.nn.Module):
         # if we are calculating the Jacobian, do so now, before x gets modified
         if jacobian is not None:
             # more efficient implementation: we first create a mask to see where x is above the threshold
-            mask = (torch.abs(x[:,:]) > _lambda)
+            mask = (torch.abs(x[:,:]) > _lambda).float() * (torch.abs(x[:,:]) < max_clip).float()
 
             # the mask will be of shape (batch_size, N), while jacbian is of shape (batch_size, N, M)
 
@@ -221,6 +222,9 @@ class ISTAPrototype(torch.nn.Module):
             # # multiply the current jacobian with the new jacobian
             # jacobian = torch.matmul(new_jacobian, jacobian)
 
+        # clip the x values to prevent numerical instability
+        x = torch.clamp(x, -max_clip, max_clip)
+        
         # perform soft thresholding
         x = torch.nn.functional.softshrink(x, _lambda)
 
@@ -889,13 +893,18 @@ def train_lista(lista: LISTA, data_generator, nr_iterations: int, forgetting_fac
 
         # show the loss plot
         batches = np.arange(i+1)+1
-        ymax_quantile = torch.quantile(losses[:i+1], 0.98).item()
-        ymax = ymax_quantile if ymax_quantile > 0 else 1 # make sure the ymax is at least 1
+        ymax = torch.quantile(losses[:i+1], 0.95).item()
+        ymin = torch.quantile(losses[:i+1], 0.05).item()
+        y_diff = ymax - ymin
+        if y_diff == 0:
+            y_diff = 1
+        ymax += 0.5*y_diff
+        ymin -= 0.5*y_diff
         xmax = batches.max() if i > 0 else 2             # make sure the xmax is at least 2
 
         plt.figure()
         plt.plot(batches,losses[:i+1].cpu().numpy())
-        plt.ylim(0, ymax)
+        plt.ylim(ymin, ymax)
         plt.xlim(batches.min(), xmax)
         plt.grid()
         plt.title("l1 loss over the batches")
@@ -925,6 +934,10 @@ def train_lista(lista: LISTA, data_generator, nr_iterations: int, forgetting_fac
         # check if patience is reached, if so, stop
         if patience_counter == patience:
             break
+
+    # save the state_dict
+    state_dict = lista.state_dict()
+    torch.save(state_dict, f"{loss_folder}/lista_state_dict.tar")
 
     return lista, losses
 
@@ -991,11 +1004,9 @@ def support_accuracy(x1: torch.tensor, x2: torch.tensor):
     support_x1 = (x1 != 0).float()
     support_x2 = (x2 != 0).float()
 
-    # calculate the amount of corrects, which are defined as finding the correct support across all N for a single batch
-    corrects = torch.prod((support_x1 == support_x2)*1.0, dim=1) # this only equals 1 if all elements are equal
     
-    # accuracy is simply corrects.mean()*100
-    accuracy = corrects.mean()*100
+    # accuracy is simply the average number of times the support is the same times 100
+    accuracy = torch.mean((support_x1 == support_x2)*100.0)
 
     return accuracy
     
