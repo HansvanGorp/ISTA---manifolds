@@ -826,9 +826,101 @@ def data_generator(A: torch.tensor, batch_size: int = 4, maximum_sparsity: int =
 
     return y, x  
 
-def train_lista(lista: LISTA, data_generator, nr_iterations: int, forgetting_factor:float, learning_rate: float = 1e-4, patience: int = 100,
-                show_loss_plot: bool = False, loss_folder: str = None, verbose: bool = True, tqdm_position: int = 0, tqdm_leave: bool = True):
+
+def get_regularization_loss(lista: LISTA, regularize_config: dict):
     """
+    get the regularization loss for a LISTA module. This loss is defined as taking a 1D path along the input space, and then taking the jacobian. 
+    From the jacobian, we extract the individual regions, based on the fact that the derivative is zero between the points inside a region.
+    We then put an l1 loss on the difference between any of the points on a region compared to the neighbouring region that it is closest to.
+
+    e.g we have three regions with 1D jacobians that are:   -5,-2, -2, -2, 1, 1, 1, 7, 7, 7, 7, 7, 17
+    Then the first region will have the loss: |-2-1|, the second region will have the loss |-2-2|, and the third region will have the loss |1-7| 
+    Note that we ignore the first and last region, as they do not have a left or right neighbour.
+    """
+    M, N = lista.A.shape
+
+    # step 1, generate a path
+    y = generate_path(M, regularize_config["nr_points_along_path"], regularize_config["path_delta"], regularize_config["anchor_point_std"], lista.device)
+
+    # step 2, inialize x and the jacboian
+    x, jacobian = lista.get_initial_x_and_jacobian(regularize_config["nr_points_along_path"], calculate_jacobian = True)
+
+    # step 3, initialze a jacobian over time tensor of shape (nr_fold, nr_points_along_path, N, M)
+    nr_folds = lista.K
+    jacobian_over_time = torch.zeros(nr_folds, regularize_config["nr_points_along_path"], N, M, device = lista.device)
+
+    # step 4, loop over the iterations, saving the jacobian at each iteration into the jacobian_over_time tensor
+    for k in range(nr_folds):
+        x, jacobian = lista.forward_at_iteration(x, y, k, jacobian)
+        jacobian_over_time[k] = jacobian
+
+    # step 5, reshape the jacobian_over_time tensor to (nr_folds, nr_points_along_path, N*M)
+    jacobian_over_time = jacobian_over_time.view(nr_folds, regularize_config["nr_points_along_path"], N*M)
+
+    # step 6, calculate the differences between consecutive points
+    with torch.no_grad():
+        differences = torch.mean(torch.abs(jacobian_over_time[:,1:,:] - jacobian_over_time[:,:-1,:]), dim = -1)
+
+    # step 7, loop the iterations, for each fold, calculate the loss
+    regularization_loss = 0
+    # for k in range(nr_folds):
+    for k in range(nr_folds-1, nr_folds): # just do the last fold for now
+        # get the nr of knots, and the location of the knots
+        knot_locations = torch.nonzero(differences[k,:])[:,0]
+        nr_of_knots = len(knot_locations)
+
+        # step 7, loop over each region in the jacobian, except the two edge regions (first and last)
+        for region_idx in range(1,nr_of_knots):
+            # get the indices of the region
+            start_idx = knot_locations[region_idx-1].item()
+            end_idx   = knot_locations[region_idx].item()
+
+            # get the value of the jacobian of this region, as well as its left and right neighbour
+            jacobian_region = jacobian_over_time[k, start_idx+1:end_idx+1, :]
+
+            # calculate the loss, as the l1 loss to the jacobian of the closest neighbour
+            if differences[k, start_idx] < differences[k, end_idx]:
+                # the left neighbour is the closest
+                regularization_loss += torch.abs(jacobian_region - jacobian_over_time[k, start_idx, :]).mean()
+            else:
+                # the right neighbour is the closest   
+                regularization_loss += torch.abs(jacobian_region - jacobian_over_time[k, end_idx+1, :]).mean()
+
+    return regularization_loss
+
+def get_regularization_loss_2(lista: LISTA, regularize_config: dict):
+    """
+    This second regularization loss is imply an l1 norm between al W matrices of the lista module
+    Note that lista.W1 is a parameter list, so we need to take the mean of all the W1 matrices
+    same aplies to lista.W2, and lista.bias
+
+    """
+
+    # l1 for W1
+    W1_stacked = torch.stack([W1 for W1 in lista.W1])
+    average_W1 = torch.mean(W1_stacked, dim=0)
+    l1_W1 = torch.mean(torch.abs(W1_stacked - average_W1))
+
+    # l1 for W2
+    W2_stacked = torch.stack([W2 for W2 in lista.W2])
+    average_W2 = torch.mean(W2_stacked, dim=0)
+    l1_W2 = torch.mean(torch.abs(W2_stacked - average_W2))
+
+    # l1 for bias
+    bias_stacked = torch.stack([bias for bias in lista.bias])
+    average_bias = torch.mean(bias_stacked, dim=0)
+    l1_bias = torch.mean(torch.abs(bias_stacked - average_bias))
+
+    # calculate the total loss
+    regularization_loss = l1_W1 + l1_W2 + l1_bias
+
+    return regularization_loss
+
+
+def train_lista(lista: LISTA, data_generator, nr_iterations: int, forgetting_factor:float, learning_rate: float = 1e-4, patience: int = 100, #NOSONAR
+                show_loss_plot: bool = False, loss_folder: str = None, verbose: bool = True, tqdm_position: int = 0, tqdm_leave: bool = True,
+                regularize: bool = False, regularize_config: dict = None, save_name: str = "lista"): 
+    """ 
     Train the LISTA module using the data generator.
 
     inputs:
@@ -840,6 +932,13 @@ def train_lista(lista: LISTA, data_generator, nr_iterations: int, forgetting_fac
     - learning_rate (float): the learning rate of the optimizer
     - patience (int): the patience for the early stopping
     - show_loss_plot (bool): if True, show the loss plot
+    - loss_folder (str): the folder to save the loss plot in
+    - verbose (bool): if True, print the loss
+    - tqdm_position (int): the position of the tqdm bar
+    - tqdm_leave (bool): if True, leave the tqdm bar
+    - regularize (bool): if True, regularize the LISTA module -> RLISTA
+    - regularize_config (dict): the configuration of the regularization
+    - save_name (str): the name to save the loss plot as
 
     outputs:
     - lista (LISTA): the trained LISTA module
@@ -849,6 +948,9 @@ def train_lista(lista: LISTA, data_generator, nr_iterations: int, forgetting_fac
     
     # initialize the loss list
     losses = torch.zeros(nr_iterations)
+
+    reconstruction_losses = torch.zeros(nr_iterations)
+    regularization_losses = torch.zeros(nr_iterations)
 
     # calculate the loss_multiplier over the folds
     K = lista.K
@@ -862,7 +964,7 @@ def train_lista(lista: LISTA, data_generator, nr_iterations: int, forgetting_fac
     patience_counter = 0
 
     # loop over the iterations
-    for i in tqdm(range(nr_iterations), position=tqdm_position, leave=tqdm_leave, disable=not verbose, desc="training LISTA, runnning over batches"):
+    for i in tqdm(range(nr_iterations), position=tqdm_position, leave=tqdm_leave, disable=not verbose, desc=f"training {save_name}, runnning over batches"):
         # generate the data
         y, x = data_generator()
 
@@ -870,14 +972,23 @@ def train_lista(lista: LISTA, data_generator, nr_iterations: int, forgetting_fac
         optimizer.zero_grad()
 
         # forward pass
-        x_hat, _ = lista(y, verbose = False, return_intermediate = True)
+        x_hat, _ = lista(y, verbose = False, return_intermediate = True, calculate_jacobian = False)
 
         # because x_hat has the intermediate x's, we need to expand the x to the same shape
         x = x.unsqueeze(2).expand_as(x_hat)
 
         # calculate the l1 loss over the K folds
         loss_per_fold = torch.abs(x_hat - x).mean((0,1))
-        loss = torch.sum(loss_per_fold * loss_multiplier)/sum_of_loss_multiplier
+        reconstruction_loss = torch.sum(loss_per_fold * loss_multiplier)/sum_of_loss_multiplier
+
+        # now check if we need to regularize
+        if regularize:
+            # regularization_loss = get_regularization_loss(lista, regularize_config)
+            regularization_loss = get_regularization_loss_2(lista, regularize_config)
+            regularization_loss *= regularize_config["weight"]
+            loss = 0.5 * reconstruction_loss + 0.5 * regularization_loss    
+        else:
+            loss = reconstruction_loss
 
         # backprop
         loss.backward()
@@ -890,39 +1001,39 @@ def train_lista(lista: LISTA, data_generator, nr_iterations: int, forgetting_fac
 
         # save the loss
         losses[i] = loss.item()
+        if regularize:
+            reconstruction_losses[i] = reconstruction_loss.item()
+            regularization_losses[i] = regularization_loss.item()
 
         # show the loss plot
         batches = np.arange(i+1)+1
-        ymax = torch.quantile(losses[:i+1], 0.95).item()
-        ymin = torch.quantile(losses[:i+1], 0.05).item()
-        y_diff = ymax - ymin
-        if y_diff == 0:
-            y_diff = 1
-        ymax += 0.5*y_diff
-        ymin -= 0.5*y_diff
         xmax = batches.max() if i > 0 else 2             # make sure the xmax is at least 2
 
         plt.figure()
         plt.plot(batches,losses[:i+1].cpu().numpy())
-        plt.ylim(ymin, ymax)
+        if regularize:
+            plt.plot(batches,reconstruction_losses[:i+1].cpu().numpy())
+            plt.plot(batches,regularization_losses[:i+1].cpu().numpy())
+            plt.legend(["total loss", "reconstruction loss", "regularization loss"], loc='best')
+
         plt.xlim(batches.min(), xmax)
         plt.grid()
-        plt.title("l1 loss over the batches")
+        plt.title("loss over the batches")
         plt.xlabel("batch")
-        plt.ylabel("l1 loss")
+        plt.ylabel("loss")
         plt.tight_layout()
         
         if loss_folder is None:
-            plt.savefig("loss_plot.jpg", dpi=300, bbox_inches='tight')
-            plt.savefig("loss_plot.svg", bbox_inches='tight')
+            plt.savefig(f"loss_{save_name}.jpg", dpi=300, bbox_inches='tight')
+            plt.savefig(f"loss_{save_name}.svg", bbox_inches='tight')
         else:
-            plt.savefig(f"{loss_folder}/loss_plot.jpg", dpi=300, bbox_inches='tight')
-            plt.savefig(f"{loss_folder}/loss_plot.svg", bbox_inches='tight')
+            plt.savefig(f"{loss_folder}/loss_{save_name}.jpg", dpi=300, bbox_inches='tight')
+            plt.savefig(f"{loss_folder}/loss_{save_name}.svg", bbox_inches='tight')
 
         if show_loss_plot:
             plt.show()
         else:
-            plt.close()
+            plt.close()       
 
         # check if this loss is the current best loss
         if loss < best_loss:
@@ -937,7 +1048,7 @@ def train_lista(lista: LISTA, data_generator, nr_iterations: int, forgetting_fac
 
     # save the state_dict
     state_dict = lista.state_dict()
-    torch.save(state_dict, f"{loss_folder}/lista_state_dict.tar")
+    torch.save(state_dict, f"{loss_folder}/{save_name}_state_dict.tar")
 
     return lista, losses
 

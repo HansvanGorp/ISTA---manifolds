@@ -80,11 +80,15 @@ print("\nStarting the experiments")
 # inialize two lists to store the knot densities of ISTA and LISTA
 ista_knot_density_over_experiments  = []
 lista_knot_density_over_experiments = []
+rlista_knot_density_over_experiments = []
 ista_support_accuracy_over_experiments = []
 lista_support_accuracy_over_experiments = []
+rlista_support_accuracy_over_experiments = []
 ista_support_accuracy_over_experiments_ood = []
 lista_support_accuracy_over_experiments_ood = []
-losses_over_experiments = []
+rlista_support_accuracy_over_experiments_ood = []
+lista_losses_over_experiments = []
+rlista_losses_over_experiments = []
 
 # initiale the df for the parallel coordinates plot, each row will be an experiment
 # the df has the following columns: M, N, K, noise_std, mu, lambda, knot_density_ista_max,  knot_density_ista_end, knot_density_lista_max, knot_density_lista_end
@@ -119,21 +123,33 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     with open(os.path.join(results_dir_this_experiment, "grid_search_results.yaml"), 'a') as file:
         yaml.dump({"mu": mu.cpu().item(), "lambda": _lambda.cpu().item()}, file)
 
-    # Using the opimized mu and lambda, initialize the ISTA and LISTA models
-    model_ista  = ista.ISTA( A, mu = mu, _lambda= _lambda, K = config["ISTA"]["nr_folds"],  device = config["device"])
-    model_lista = ista.LISTA(A, mu = mu, _lambda= _lambda, K = config["LISTA"]["nr_folds"], device = config["device"], initialize_randomly = False)
+    # Using the opimized mu and lambda, initialize the ISTA, LISTA, and RLISTA models
+    model_ista   = ista.ISTA( A, mu = mu, _lambda= _lambda, K = config["ISTA"]["nr_folds"],   device = config["device"])
+    model_lista  = ista.LISTA(A, mu = mu, _lambda= _lambda, K = config["LISTA"]["nr_folds"],  device = config["device"], initialize_randomly = False)
+    model_rlista = ista.LISTA(A, mu = mu, _lambda= _lambda, K = config["RLISTA"]["nr_folds"], device = config["device"], initialize_randomly = False)
 
     # train LISTA
-    data_generator_initialized = lambda: ista.data_generator(A, config["LISTA"]["batch_size"], K, config["data_that_stays_constant"]["x_magnitude"], N, config["device"], noise_std = config["data_that_stays_constant"]["noise_std"])
-    model_lista,losses = ista.train_lista(model_lista, data_generator_initialized, config["LISTA"]["nr_of_batches"], config["LISTA"]["weighting_for_first_fold"],  config["LISTA"]["learning_rate"],
-                                          patience= config["LISTA"]["patience"], show_loss_plot = False, tqdm_position=1, verbose=True, tqdm_leave=tqdm_leave, loss_folder =results_dir_this_experiment)
+    data_generator_initialized = lambda: ista.data_generator(A, config["LISTA"]["batch_size"], K, config["data_that_stays_constant"]["x_magnitude"], N, 
+                                                             config["device"], noise_std = config["data_that_stays_constant"]["noise_std"])
     
+    model_lista,lista_losses  = ista.train_lista(model_lista, data_generator_initialized, config["LISTA"]["nr_of_batches"], config["LISTA"]["weighting_for_first_fold"],  
+                                                 config["LISTA"]["learning_rate"], patience= config["LISTA"]["patience"], show_loss_plot = False, tqdm_position=1, 
+                                                 verbose=True, tqdm_leave=tqdm_leave, loss_folder =results_dir_this_experiment, save_name = "LISTA",)
+    
+    # train RLISTA
+    model_rlista,rlista_losses = ista.train_lista(model_lista, data_generator_initialized, config["RLISTA"]["nr_of_batches"], config["RLISTA"]["weighting_for_first_fold"],  
+                                                 config["RLISTA"]["learning_rate"], patience= config["RLISTA"]["patience"], show_loss_plot = False, tqdm_position=1, 
+                                                 verbose=True, tqdm_leave=tqdm_leave, loss_folder = results_dir_this_experiment, save_name = "RLISTA",
+                                                 regularize=True, regularize_config = config["RLISTA"]["regularization"])
+
     # save the losses in a .tar files
-    torch.save(losses, os.path.join(results_dir_this_experiment, "losses.tar"))
+    torch.save(lista_losses, os.path.join(results_dir_this_experiment, "lista_losses.tar"))
+    torch.save(rlista_losses, os.path.join(results_dir_this_experiment, "rlista_losses.tar"))
 
 
     # store the losses in the list
-    losses_over_experiments.append(losses)
+    lista_losses_over_experiments.append(lista_losses.cpu())
+    rlista_losses_over_experiments.append(rlista_losses.cpu())
 
     # perform knot density analysis on the mdels
     knot_density_ista = ista.knot_density_analysis(model_ista, config["ISTA"]["nr_folds"], A, 
@@ -156,32 +172,47 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
                                                    verbose = True, color = 'tab:orange',
                                                    tqdm_position=1, tqdm_leave=tqdm_leave)
     
+    knot_density_rlista = ista.knot_density_analysis(model_rlista, config["RLISTA"]["nr_folds"], A, 
+                                                   nr_paths = config["Path"]["nr_paths"],
+                                                   anchor_point_std = config["Path"]["anchor_point_std"],
+                                                   nr_points_along_path=config["Path"]["nr_points_along_path"], 
+                                                   path_delta=config["Path"]["path_delta"],
+                                                   save_folder = results_dir_this_experiment,
+                                                   save_name = "knot_density_RLISTA", 
+                                                   verbose = True, color = 'tab:purple',
+                                                   tqdm_position=1, tqdm_leave=tqdm_leave)
+    
     
     # save the knot densities in a .tar file
-    torch.save(knot_density_ista,  os.path.join(results_dir_this_experiment, "knot_density_ISTA.tar"))
-    torch.save(knot_density_lista, os.path.join(results_dir_this_experiment, "knot_density_LISTA.tar"))
+    torch.save(knot_density_ista,   os.path.join(results_dir_this_experiment, "knot_density_ISTA.tar"))
+    torch.save(knot_density_lista,  os.path.join(results_dir_this_experiment, "knot_density_LISTA.tar"))
+    torch.save(knot_density_rlista, os.path.join(results_dir_this_experiment, "knot_density_RLISTA.tar"))
 
     # make a joint plot of the knot densities
     max_folds = max(config["ISTA"]["nr_folds"], config["LISTA"]["nr_folds"])
     folds_ista = np.arange(0,config["ISTA"]["nr_folds"]+1)
     folds_lista = np.arange(0,config["LISTA"]["nr_folds"]+1)
+    folds_rlista = np.arange(0,config["RLISTA"]["nr_folds"]+1)
 
     plt.figure()
     plt.plot(folds_ista,knot_density_ista,  '-', label = "ISTA",  c = 'tab:blue')
     plt.plot(folds_lista,knot_density_lista,'-', label = "LISTA", c = 'tab:orange')
+    plt.plot(folds_rlista,knot_density_rlista,'-', label = "RLISTA", c = 'tab:purple')
     plt.grid()
     plt.xlabel("fold")
     plt.ylabel("knot density")
     plt.legend(loc='best')
     plt.xlim([0,max_folds])
     plt.tight_layout()
-    plt.savefig(os.path.join(results_dir_this_experiment, "knot_density_ISTA_and_LISTA.png"), dpi=300, bbox_inches='tight')
-    plt.savefig(os.path.join(results_dir_this_experiment, "knot_density_ISTA_and_LISTA.svg"), bbox_inches='tight')
+    plt.savefig(os.path.join(results_dir_this_experiment, "knot_density_ISTA_and_LISTA_and_RLISTA.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(results_dir_this_experiment, "knot_density_ISTA_and_LISTA_and_RLISTA.svg"), bbox_inches='tight')
     plt.close()
 
     # store the knot densities in the lists
     ista_knot_density_over_experiments.append(knot_density_ista.cpu())
     lista_knot_density_over_experiments.append(knot_density_lista.cpu())
+    rlista_knot_density_over_experiments.append(knot_density_rlista.cpu())
+
 
     # %% support reconstruction accuracy over the folds
     y, x         = ista.data_generator(A, config["support_accuracy_nr_points_to_use"],  K, config["data_that_stays_constant"]["x_magnitude"],     N, config["device"], noise_std = config["data_that_stays_constant"]["noise_std"])
@@ -211,25 +242,40 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
                                                             verbose = True, color = 'tab:red',
                                                             tqdm_position=1, tqdm_leave=tqdm_leave)
     
+    support_accuracy_rlista = ista.support_accuracy_analysis(model_rlista, config["RLISTA"]["nr_folds"], A, y, x,
+                                                            save_folder = results_dir_this_experiment,
+                                                            save_name = "support_accuracy_RLISTA", 
+                                                            verbose = True, color = 'tab:purple',
+                                                            tqdm_position=1, tqdm_leave=tqdm_leave)
+    
+    support_accuracy_rlista_ood = ista.support_accuracy_analysis(model_rlista, config["RLISTA"]["nr_folds"], A, y_ood, x_ood,
+                                                            save_folder = results_dir_this_experiment,
+                                                            save_name = "support_accuracy_RLISTA", 
+                                                            verbose = True, color = 'tab:pink',
+                                                            tqdm_position=1, tqdm_leave=tqdm_leave)
+    
     
     # make a joint plot of the support accuracies
     max_folds = max(config["ISTA"]["nr_folds"], config["LISTA"]["nr_folds"])
     folds_ista = np.arange(0,config["ISTA"]["nr_folds"]+1)
     folds_lista = np.arange(0,config["LISTA"]["nr_folds"]+1)
+    folds_rlista = np.arange(0,config["RLISTA"]["nr_folds"]+1)
 
     plt.figure()
     plt.plot(folds_ista,support_accuracy_ista,      '-',  label = "ISTA",     c = 'tab:blue')
     plt.plot(folds_ista,support_accuracy_ista_ood,  '--', label = "ISTA OOD", c = 'tab:green')
     plt.plot(folds_lista,support_accuracy_lista,    '-',  label = "LISTA",    c = 'tab:orange')
     plt.plot(folds_lista,support_accuracy_lista_ood,'--', label = "LISTA OOD",c = 'tab:red')
+    plt.plot(folds_rlista,support_accuracy_rlista,    '-',  label = "RLISTA",    c = 'tab:purple')
+    plt.plot(folds_rlista,support_accuracy_rlista_ood,'--', label = "RLISTA OOD",c = 'tab:pink')
     plt.grid()
     plt.xlabel("fold")
     plt.ylabel("support accuracy")
     plt.legend(loc='best')
     plt.xlim([0,max_folds])
     plt.tight_layout()
-    plt.savefig(os.path.join(results_dir_this_experiment, "support_accuracy_ISTA_and_LISTA.png"), dpi=300, bbox_inches='tight')
-    plt.savefig(os.path.join(results_dir_this_experiment, "support_accuracy_ISTA_and_LISTA.svg"), bbox_inches='tight')
+    plt.savefig(os.path.join(results_dir_this_experiment, "support_accuracy_ISTA_and_LISTA_and_RLISTA.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(results_dir_this_experiment, "support_accuracy_ISTA_and_LISTA_and_RLISTA.svg"), bbox_inches='tight')
     plt.close()
 
     # save the support accuracies in a .tar file
@@ -237,12 +283,16 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     torch.save(support_accuracy_lista, os.path.join(results_dir_this_experiment, "support_accuracy_LISTA.tar"))
     torch.save(support_accuracy_ista_ood,  os.path.join(results_dir_this_experiment, "support_accuracy_ISTA_ood.tar"))
     torch.save(support_accuracy_lista_ood, os.path.join(results_dir_this_experiment, "support_accuracy_LISTA_ood.tar"))
+    torch.save(support_accuracy_rlista, os.path.join(results_dir_this_experiment, "support_accuracy_RLISTA.tar"))
+    torch.save(support_accuracy_rlista_ood, os.path.join(results_dir_this_experiment, "support_accuracy_RLISTA_ood.tar"))
 
     # store the support accuracies in the lists
     ista_support_accuracy_over_experiments.append(support_accuracy_ista.cpu())
     lista_support_accuracy_over_experiments.append(support_accuracy_lista.cpu())
     ista_support_accuracy_over_experiments_ood.append(support_accuracy_ista_ood.cpu())
     lista_support_accuracy_over_experiments_ood.append(support_accuracy_lista_ood.cpu())
+    rlista_support_accuracy_over_experiments.append(support_accuracy_rlista.cpu())
+    rlista_support_accuracy_over_experiments_ood.append(support_accuracy_rlista_ood.cpu())
 
     # %%
     """
@@ -254,15 +304,19 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     # %% plot the knot densities over the experiments
     plt.figure()
 
-    ista_mean_over_experiments  = torch.stack(ista_knot_density_over_experiments).mean(dim=0)
-    ista_std_over_experiments   = torch.stack(ista_knot_density_over_experiments).std(dim=0)
-    lista_mean_over_experiments = torch.stack(lista_knot_density_over_experiments).mean(dim=0)
-    lista_std_over_experiments  = torch.stack(lista_knot_density_over_experiments).std(dim=0)
+    ista_mean_over_experiments   = torch.stack(ista_knot_density_over_experiments  ).mean(dim=0)
+    ista_std_over_experiments    = torch.stack(ista_knot_density_over_experiments  ).std( dim=0)
+    lista_mean_over_experiments  = torch.stack(lista_knot_density_over_experiments ).mean(dim=0)
+    lista_std_over_experiments   = torch.stack(lista_knot_density_over_experiments ).std( dim=0)
+    rlista_mean_over_experiments = torch.stack(rlista_knot_density_over_experiments).mean(dim=0)
+    rlista_std_over_experiments  = torch.stack(rlista_knot_density_over_experiments).std( dim=0)
 
     plt.plot(folds_ista, ista_mean_over_experiments, '-', c = 'tab:blue', label = "ISTA")
     plt.fill_between(folds_ista, ista_mean_over_experiments - ista_std_over_experiments, ista_mean_over_experiments + ista_std_over_experiments, alpha=0.3, color='tab:blue')
     plt.plot(folds_lista, lista_mean_over_experiments, '-', c = 'tab:orange', label = "LISTA")
     plt.fill_between(folds_lista, lista_mean_over_experiments - lista_std_over_experiments, lista_mean_over_experiments + lista_std_over_experiments, alpha=0.3, color='tab:orange')
+    plt.plot(folds_rlista, rlista_mean_over_experiments, '-', c = 'tab:purple', label = "RLISTA")
+    plt.fill_between(folds_rlista, rlista_mean_over_experiments - rlista_std_over_experiments, rlista_mean_over_experiments + rlista_std_over_experiments, alpha=0.3, color='tab:purple')
     plt.grid()
     plt.xlabel("fold")
     plt.ylabel("knot density")
@@ -270,32 +324,29 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     plt.xlim([0,max_folds])
     plt.title("mean and std of the knot density per fold over the random experiments")
     plt.tight_layout()
-    plt.savefig(os.path.join(results_dir_with_parent, "knot_density_ISTA_and_LISTA_over_experiments.png"), dpi=300, bbox_inches='tight')
-    plt.savefig(os.path.join(results_dir_with_parent, "knot_density_ISTA_and_LISTA_over_experiments.svg"), bbox_inches='tight')
+    plt.savefig(os.path.join(results_dir_with_parent, "knot_density_ISTA_and_LISTA_and_RLISTA_over_experiments.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(results_dir_with_parent, "knot_density_ISTA_and_LISTA_and_RLISTA_over_experiments.svg"), bbox_inches='tight')
     plt.close()
 
     # %% plot the losses over the experiments
     plt.figure()
-    batches = np.arange(1, len(losses_over_experiments[0])+1)
-    losses_mean_over_experiments = torch.stack(losses_over_experiments).mean(dim=0)
-    losses_std_over_experiments = torch.stack(losses_over_experiments).std(dim=0)
+    lista_batches = np.arange(1, len(lista_losses_over_experiments[0])+1)
+    lista_losses_mean_over_experiments = torch.stack(lista_losses_over_experiments).mean(dim=0)
+    lista_losses_std_over_experiments = torch.stack(lista_losses_over_experiments).std(dim=0)
 
-    if torch.isnan(losses_std_over_experiments).any():
-        losses_std_over_experiments = torch.zeros_like(losses_mean_over_experiments)
+    rlista_batches = np.arange(1, len(rlista_losses_over_experiments[0])+1)
+    rlista_losses_mean_over_experiments = torch.stack(rlista_losses_over_experiments).mean(dim=0)
+    rlista_losses_std_over_experiments = torch.stack(rlista_losses_over_experiments).std(dim=0)
 
-    ymax = torch.quantile(losses_mean_over_experiments + losses_std_over_experiments, 0.95).item()
-    ymin = torch.quantile(losses_mean_over_experiments - losses_std_over_experiments, 0.05).item()
-    y_diff = ymax - ymin
-    ymax += 0.5*y_diff
-    ymin -= 0.5*y_diff
+    plt.plot(lista_batches,lista_losses_mean_over_experiments, '-', c = 'tab:orange', label = "loss")
+    plt.fill_between(lista_batches, lista_losses_mean_over_experiments - lista_losses_std_over_experiments, lista_losses_mean_over_experiments + lista_losses_std_over_experiments, alpha=0.3, color='tab:orange')
 
-    plt.plot(batches,losses_mean_over_experiments, '-', c = 'tab:blue', label = "loss")
-    plt.fill_between(batches, losses_mean_over_experiments - losses_std_over_experiments, losses_mean_over_experiments + losses_std_over_experiments, alpha=0.3, color='tab:blue')
+    plt.plot(rlista_batches,rlista_losses_mean_over_experiments, '-', c = 'tab:purple', label = "loss")
+    plt.fill_between(rlista_batches, rlista_losses_mean_over_experiments - rlista_losses_std_over_experiments, rlista_losses_mean_over_experiments + rlista_losses_std_over_experiments, alpha=0.3, color='tab:purple')
+
     plt.grid()
     plt.xlabel("batch")
     plt.ylabel("loss")
-    plt.xlim(1,len(losses_over_experiments[0]))
-    plt.ylim(ymin, ymax)
     plt.title("mean and std of the loss over the random experiments")
     plt.tight_layout()
     plt.savefig(os.path.join(results_dir_with_parent, "loss_over_experiments.png"), dpi=300, bbox_inches='tight')
@@ -308,21 +359,29 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     ista_std_over_experiments   = torch.stack(ista_support_accuracy_over_experiments).std(dim=0)
     lista_mean_over_experiments = torch.stack(lista_support_accuracy_over_experiments).mean(dim=0)
     lista_std_over_experiments  = torch.stack(lista_support_accuracy_over_experiments).std(dim=0)
+    rlista_mean_over_experiments = torch.stack(rlista_support_accuracy_over_experiments).mean(dim=0)
+    rlista_std_over_experiments  = torch.stack(rlista_support_accuracy_over_experiments).std(dim=0)
 
     ista_mean_over_experiments_ood  = torch.stack(ista_support_accuracy_over_experiments_ood).mean(dim=0)
     ista_std_over_experiments_ood   = torch.stack(ista_support_accuracy_over_experiments_ood).std(dim=0)
     lista_mean_over_experiments_ood = torch.stack(lista_support_accuracy_over_experiments_ood).mean(dim=0)
     lista_std_over_experiments_ood  = torch.stack(lista_support_accuracy_over_experiments_ood).std(dim=0)
+    rlista_mean_over_experiments_ood = torch.stack(rlista_support_accuracy_over_experiments_ood).mean(dim=0)
+    rlista_std_over_experiments_ood  = torch.stack(rlista_support_accuracy_over_experiments_ood).std(dim=0)
 
     plt.plot(folds_ista, ista_mean_over_experiments, '-', c = 'tab:blue', label = "ISTA")
     plt.fill_between(folds_ista, ista_mean_over_experiments - ista_std_over_experiments, ista_mean_over_experiments + ista_std_over_experiments, alpha=0.3, color='tab:blue')
     plt.plot(folds_lista, lista_mean_over_experiments, '-', c = 'tab:orange', label = "LISTA")
     plt.fill_between(folds_lista, lista_mean_over_experiments - lista_std_over_experiments, lista_mean_over_experiments + lista_std_over_experiments, alpha=0.3, color='tab:orange')
+    plt.plot(folds_rlista, rlista_mean_over_experiments, '-', c = 'tab:purple', label = "RLISTA")
+    plt.fill_between(folds_rlista, rlista_mean_over_experiments - rlista_std_over_experiments, rlista_mean_over_experiments + rlista_std_over_experiments, alpha=0.3, color='tab:purple')
 
     plt.plot(folds_ista, ista_mean_over_experiments_ood, '--', c = 'tab:green', label = "ISTA OOD")
     plt.fill_between(folds_ista, ista_mean_over_experiments_ood - ista_std_over_experiments_ood, ista_mean_over_experiments_ood + ista_std_over_experiments_ood, alpha=0.3, color='tab:green')
     plt.plot(folds_lista, lista_mean_over_experiments_ood, '--', c = 'tab:red', label = "LISTA OOD")
     plt.fill_between(folds_lista, lista_mean_over_experiments_ood - lista_std_over_experiments_ood, lista_mean_over_experiments_ood + lista_std_over_experiments_ood, alpha=0.3, color='tab:red')
+    plt.plot(folds_rlista, rlista_mean_over_experiments_ood, '--', c = 'tab:pink', label = "RLISTA OOD")
+    plt.fill_between(folds_rlista, rlista_mean_over_experiments_ood - rlista_std_over_experiments_ood, rlista_mean_over_experiments_ood + rlista_std_over_experiments_ood, alpha=0.3, color='tab:pink')
 
     plt.grid()
     plt.xlabel("fold")
@@ -331,8 +390,8 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     plt.xlim([0,max_folds])
     plt.title("mean and std of the support accuracy per fold over the random experiments")
     plt.tight_layout()
-    plt.savefig(os.path.join(results_dir_with_parent, "support_accuracy_ISTA_and_LISTA_over_experiments.png"), dpi=300, bbox_inches='tight')
-    plt.savefig(os.path.join(results_dir_with_parent, "support_accuracy_ISTA_and_LISTA_over_experiments.svg"), bbox_inches='tight')
+    plt.savefig(os.path.join(results_dir_with_parent, "support_accuracy_ISTA_and_LISTA_and_RLISTA_over_experiments.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(results_dir_with_parent, "support_accuracy_ISTA_and_LISTA_and_RLISTA_over_experiments.svg"), bbox_inches='tight')
     plt.close()
 
 
@@ -344,13 +403,15 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     new_row = pd.DataFrame({"M": M, "N": N, "K": K, "mu": mu.cpu().item(), "lambda": _lambda.cpu().item(), 
                             "knot_density_ista_max": knot_density_ista.max().cpu().item(), "knot_density_ista_end": knot_density_ista[-1].cpu().item(),
                             "knot_density_lista_max": knot_density_lista.max().cpu().item(), "knot_density_lista_end": knot_density_lista[-1].cpu().item(),
+                            "knot_density_rlista_max": knot_density_rlista.max().cpu().item(), "knot_density_rlista_end": knot_density_rlista[-1].cpu().item(),
                             "support_accuracy_ista_end": support_accuracy_ista[-1].cpu().item(), "support_accuracy_lista_end": support_accuracy_lista[-1].cpu().item(),
-                            "support_accuracy_ista_end_ood": support_accuracy_ista_ood[-1].cpu().item(), "support_accuracy_lista_end_ood": support_accuracy_lista_ood[-1].cpu().item()
+                            "support_accuracy_ista_end_ood": support_accuracy_ista_ood[-1].cpu().item(), "support_accuracy_lista_end_ood": support_accuracy_lista_ood[-1].cpu().item(),
+                            "support_accuracy_rlista_end": support_accuracy_rlista[-1].cpu().item(), "support_accuracy_rlista_end_ood": support_accuracy_rlista_ood[-1].cpu().item()
                             }, index=[0])
     
     df = pd.concat([df, new_row], ignore_index=True)
 
-    # step_2, plot the df for ISTa and LISTA
+    # step_2, plot the df for ISTa and LISTA and RLISTA
     # ISTA
     fig, ax = plt.subplots(1,1, figsize=(16,8))
     plot_df_as_parallel_coordinates(df, ["K", "M", "N", "knot_density_ista_max",  "knot_density_ista_end", "support_accuracy_ista_end","support_accuracy_ista_end_ood"], 
@@ -377,6 +438,19 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     plt.savefig(os.path.join(results_dir_with_parent, "parallel_coordinates_LISTA.svg"), bbox_inches='tight')
     plt.close()
 
+    # RLISTA
+    fig, ax = plt.subplots(1,1, figsize=(16,8))
+    plot_df_as_parallel_coordinates(df, ["K", "M", "N", "knot_density_rlista_max", "knot_density_rlista_end", "support_accuracy_rlista_end","support_accuracy_rlista_end_ood"], 
+                                    "support_accuracy_rlista_end_ood",
+                                    host = ax, title="RLISTA",
+                                    perturbation_collumns = ["K", "M", "N"], 
+                                    same_y_scale_collumns = [["K", "M", "N"],["knot_density_rlista_max",  "knot_density_rlista_end"]],
+                                    accuracy_scale_collumns = ["support_accuracy_rlista_end", "support_accuracy_rlista_end_ood"])      
+    plt.tight_layout()
+    plt.savefig(os.path.join(results_dir_with_parent, "parallel_coordinates_RLISTA.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(results_dir_with_parent, "parallel_coordinates_RLISTA.svg"), bbox_inches='tight')
+    plt.close()
+
     # save the df to a .csv file
     df.to_csv(os.path.join(results_dir_with_parent, "parameters.csv"))
 
@@ -389,9 +463,12 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     knot_density_lista_max = df["knot_density_lista_max"].to_numpy()
     knot_density_lista_end = df["knot_density_lista_end"].to_numpy()
 
+    knot_density_rlista_max = df["knot_density_rlista_max"].to_numpy()
+    knot_density_rlista_end = df["knot_density_rlista_end"].to_numpy()
+
     # get the min and max values of the data
-    minimum = min(knot_density_ista_max.min(), knot_density_ista_end.min(), knot_density_lista_max.min(), knot_density_lista_end.min())
-    maximum = max(knot_density_ista_max.max(), knot_density_ista_end.max(), knot_density_lista_max.max(), knot_density_lista_end.max())
+    minimum = min(knot_density_ista_max.min(), knot_density_ista_end.min(), knot_density_lista_max.min(), knot_density_lista_end.min(), knot_density_rlista_max.min(), knot_density_rlista_end.min())
+    maximum = max(knot_density_ista_max.max(), knot_density_ista_end.max(), knot_density_lista_max.max(), knot_density_lista_end.max(), knot_density_rlista_max.max(), knot_density_rlista_end.max())
     delta   = (maximum-minimum)
 
     if delta == 0:
@@ -406,6 +483,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     plt.figure(figsize=(6,6))
     plt.scatter(knot_density_ista_max, knot_density_ista_end, c='tab:blue', label="ISTA")
     plt.scatter(knot_density_lista_max, knot_density_lista_end, c='tab:orange', label="LISTA")
+    plt.scatter(knot_density_rlista_max, knot_density_rlista_end, c='tab:purple', label="RLISTA")
     plt.plot([minimum, maximum], [minimum, maximum], '--', c='black')
     plt.xlim(minimum, maximum)
     plt.ylim(minimum, maximum)

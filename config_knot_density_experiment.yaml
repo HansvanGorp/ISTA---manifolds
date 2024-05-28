@@ -3,8 +3,8 @@
 
 # general parameters
 device: "cuda:0" # device to run the experiment on
-results_dir: "test_with_fixed_K4_M8_N1" 
-# results_dir: "test_with_fixed_K2_M4_N8"
+results_dir: "test_with_fixed_K4_M8_N16" 
+# results_dir: "test_with_fixed_K4_M4_N8" 
 seed: 0 # seed for reproducibility
 max_nr_of_experiments: 64 # maximum number of experiments to run
 
@@ -22,20 +22,20 @@ data_that_varies:
     min: 16
     max: 16
   # K:
-  #   min: 2
-  #   max: 2
+  #   min: 4
+  #   max: 4
   # M:
   #   min: 4
   #   max: 4
   # N:
-  #   min: 16
-  #   max: 16
+  #   min: 8
+  #   max: 8
 
 data_that_stays_constant:
   x_magnitude: [1,2]
-  noise_std: 0.5
-  x_magnitude_ood: [3,4]
-  noise_std_ood: 1.0
+  noise_std: 0.25
+  x_magnitude_ood: [3,6]
+  noise_std_ood: 0.5
 
 # support accuracy
 support_accuracy_nr_points_to_use: 2048 
@@ -54,14 +54,29 @@ ISTA:
   nr_points_to_use: 4096
   weighting_for_first_fold: 1 # the first fold is weighted by this factor, increasing to the last fold, which is always weighted by 1 (if 1, all folds are equally weighted)
 
-# LISTA parameters
+# LISTA parameters (Learned ISTA)
 LISTA:
   nr_folds: 512
-  batch_size: 512
+  batch_size: 64
   nr_of_batches: 8192
   learning_rate: 0.001
   weighting_for_first_fold: 1 # the first fold is weighted by this factor, increasing to the last fold, which is always weighted by 1 (if 1, all folds are equally weighted)
   patience: 1024
+
+# RLISTA parameters (Regularized - Learned - ISTA)
+RLISTA:
+  nr_folds: 512
+  batch_size: 64
+  nr_of_batches: 8192
+  learning_rate: 0.001
+  weighting_for_first_fold: 1 # the first fold is weighted by this factor, increasing to the last fold, which is always weighted by 1 (if 1, all folds are equally weighted)
+  patience: 1024
+  regularization:
+    weight: 10
+    nr_paths: 1
+    anchor_point_std: 1
+    nr_points_along_path: 4096 # 2^12
+    path_delta: 0.001
 
 # Path parameters
 Path:
