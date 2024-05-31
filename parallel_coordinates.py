@@ -176,6 +176,13 @@ def plot_df_as_parallel_coordinates(df, collumns_to_plot, color_collumn,
     collum_names = [x.replace("support_accuracy_lista_end", "Support Accuracy") for x in collum_names]
     collum_names = [x.replace("support_accuracy_rlista_end", "Support Accuracy") for x in collum_names]
 
+    collum_names = [x.replace("validation_loss_ista_end_ood", "Validation Loss OOD") for x in collum_names]
+    collum_names = [x.replace("validation_loss_lista_end_ood", "Validation Loss OOD") for x in collum_names]
+    collum_names = [x.replace("validation_loss_rlista_end_ood", "Validation Loss OOD") for x in collum_names]
+    collum_names = [x.replace("validation_loss_ista_end", "Validation Loss") for x in collum_names]
+    collum_names = [x.replace("validation_loss_lista_end", "Validation Loss") for x in collum_names]
+    collum_names = [x.replace("validation_loss_rlista_end", "Validation Loss") for x in collum_names]
+    
     # set the x axis
     host.set_xlim(0, ys.shape[1] - 1)
     host.set_xticks(range(ys.shape[1]))

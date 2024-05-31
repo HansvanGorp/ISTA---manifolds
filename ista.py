@@ -340,11 +340,31 @@ def create_random_matrix_with_good_singular_values(M: int, N: int):
     return A
 
 # %% take an (L)ISTA module and some plotting parameters, and analyze it visually
-def visual_analysis_of_ista(ista: ISTA, K: int, nr_points_along_axis: int, margin: float, indices_of_projection: tuple[int,int,int], A: torch.tensor, save_folder: str = "test_figures", tqdm_position: int = 0, tqdm_leave: bool = True, verbose: bool = False):
+def visual_analysis_of_ista(ista: ISTA, K: int, nr_points_along_axis: int, margin: float, indices_of_projection: tuple[int,int,int], A: torch.tensor, 
+                            save_folder: str = "test_figures", tqdm_position: int = 0, tqdm_leave: bool = True, verbose: bool = False,
+                            magntiude: float = 1.0, magnitude_ood: float = None):
     """
     Creates a visual analysis of the ISTA module. This is done by visualizing the linear regions of the Jacobian, and the sparsity of the x-vector.
     We only visualize in part of the space, namely a hyperplane that passes through three anchor points. This hyperplane is embedded in y-space,
     which is the actual input space of the ISTA module. We project the Jacobian to a 2D space, and visualize the linear regions in this 2D space.
+
+    inputs:
+    - ista: the ISTA module
+    - K: the number of iterations
+    - nr_points_along_axis: the number of points along the axis of the hyperplane
+    - margin: the margin around the hyperplane to visualize
+    - indices_of_projection: the indices of the anchor points, A none means the origin, a 0 means x=[1,0,0,0,..] and a 1 means x=[0,1,0,0,..], and so on.
+    - A: the matrix A in the equation y=Ax, of shape (M, N), with M<N, i.e. M is the measurement dimension and N is the signal dimension
+    - save_folder: the folder to save the figures in
+
+    - tqdm_position: the position of the tqdm bar
+    - tqdm_leave: if True, leave the tqdm bar
+    - verbose: if True, print a progress bar
+
+    - magntiude: the magnitude of the anchor points, default is 1.0
+    - magnitude_ood: the magnitude of the out of distribution anchor points, if None, we do not use out of distribution anchor points. 
+                     Note if we do this, the first anchor point should be the origin, i.e. indices_of_projection[0] should be None
+
     """
     # create the save folder if it does not exist
     if not os.path.exists(save_folder):
@@ -354,15 +374,22 @@ def visual_analysis_of_ista(ista: ISTA, K: int, nr_points_along_axis: int, margi
         for file in os.listdir(save_folder):
             os.remove(f"{save_folder}/{file}")
 
+    # figure out if we need to up to magnitude
+    if magnitude_ood is not None:
+        max_magnitude = magnitude_ood
+        assert indices_of_projection[0] is None # if we are using magnitude_ood, the first anchor should be the origin
+    else:
+        max_magnitude = magntiude
+
     # we create a projection matrix that projects the jacobian to a 2d space, for visualization, this is done by specifying three anchor points
     # anchor point 0 is where the x-vector is [0,0,0,...,0]
-    y_anchors, x_anchors = create_anchors_from_x_indices(indices_of_projection, A)
+    y_anchors, _ = create_anchors_from_x_indices(indices_of_projection, A)
     
     # create the projection matrix
     jacobian_projection = create_jacobian_projection_from_anchors(y_anchors)
 
     # create y data from the projection
-    y,Z1,Z2 = create_y_from_projection(y_anchors, nr_points_along_axis, margin = margin)
+    y,Z1,Z2 = create_y_from_projection(y_anchors, nr_points_along_axis, margin = margin, max_magnitude = max_magnitude)
 
     # run the initials function to get the initial x and jacobian
     x, jacobian = ista.get_initial_x_and_jacobian(y.shape[0], calculate_jacobian = True, jacobian_projection = jacobian_projection)
@@ -383,19 +410,29 @@ def visual_analysis_of_ista(ista: ISTA, K: int, nr_points_along_axis: int, margi
         sparsity_label, unique_labels = extract_sparsity_label_from_x(x)
         sparsity_label_reshaped = sparsity_label.reshape(nr_points_along_axis, nr_points_along_axis)
 
+        # create the three names of the anchor points
+        anchor_names = ["anchor x-index: "] * 3
+        for i in range(3):
+            anchor_names[i] += str(indices_of_projection[i]) if indices_of_projection[i] is not None else "origin"
+
         # plot the results
         plt.figure(figsize=(10, 10))
         plt.title(f"number of linear regions: {nr_of_regions}")
-        plt.imshow(norms_reshaped.cpu(), extent=[-margin, 1 + margin, -margin, 1 + margin], cmap = 'cividis', vmin = 0, vmax = torch.quantile(norms_reshaped, 0.95), origin="lower", zorder = -10)
-        
+        plt.imshow(norms_reshaped.cpu(), extent=[-margin, max_magnitude + margin, -margin, max_magnitude + margin], cmap = 'cividis', vmin = 0, vmax = torch.quantile(norms_reshaped, 0.95), origin="lower", zorder = -10)
         # scatter three points, at 0,0 and 1,0 and 0,1 and put a legen with the anchor points
-        plt.scatter(0, 0, c= 'white', label = "anchor 0", zorder = 10, marker='x', s = 50)
-        plt.scatter(1, 0, c= 'white', label = "anchor 1", zorder = 10, marker='o', s = 50)
-        plt.scatter(0, 1, c= 'white', label = "anchor 2", zorder = 10, marker='s', s = 50)
+        plt.scatter(0,         0,         c= 'white', label = anchor_names[0], zorder = 10, marker='x', s = 50)
+        plt.scatter(magntiude, 0,         c= 'white', label = anchor_names[1], zorder = 10, marker='o', s = 50)
+        plt.scatter(0,         magntiude, c= 'white', label = anchor_names[2], zorder = 10, marker='s', s = 50)
+
+        # add the ood anchor if it is there
+        if magnitude_ood is not None:
+            plt.scatter(magnitude_ood, 0,             c= 'white', label = anchor_names[1] + " ood", zorder = 10, marker='o', s = 50)
+            plt.scatter(0,             magnitude_ood, c= 'white', label = anchor_names[2] + " ood", zorder = 10, marker='s', s = 50)
+
         plt.legend()
 
-        # put a conout plot around the sparsity labels
-        plt.contour(Z2, Z1, sparsity_label_reshaped.cpu(), levels=unique_labels.cpu(), colors='k', linewidths=1, linestyles='solid', extent=[-margin, 1 + margin, -margin, 1 + margin], zorder = 1, origin="lower")
+        # put a contour plot around the sparsity labels
+        plt.contour(Z2, Z1, sparsity_label_reshaped.cpu(), levels=unique_labels.cpu(), colors='k', linewidths=1, linestyles='solid', extent=[-margin, max_magnitude + margin, -margin, max_magnitude + margin], zorder = 1, origin="lower")
         
         # make the plot look nice
         plt.tight_layout()
@@ -415,6 +452,7 @@ def visual_analysis_of_ista(ista: ISTA, K: int, nr_points_along_axis: int, margi
     plt.grid()
     plt.tight_layout()
     plt.savefig(f"{save_folder}/nr_regions_over_iterations.jpg", dpi=300, bbox_inches='tight') # save the figure as a jpg
+    plt.savefig(f"{save_folder}/nr_regions_over_iterations.svg", bbox_inches='tight')          # save the figure as a svg
     plt.close()
 
     return nr_regions_arrray
@@ -732,7 +770,7 @@ def create_anchors_from_x_indices(indices: tuple[int,int,int], A:torch.tensor):
 
     return y_anchors, x_anchors
 
-def create_y_from_projection(anchors: torch.tensor, nr_points_along_axis: int, margin: float = 0.5):
+def create_y_from_projection(anchors: torch.tensor, nr_points_along_axis: int, margin: float = 0.5, max_magnitude: float = 1.0):
     """
     Given three anchor points, create a meshgrid of y values that forms the plane of the three anchor points.
     The meshgrid is of size (nr_points_along_axis, nr_points_along_axis)
@@ -741,6 +779,7 @@ def create_y_from_projection(anchors: torch.tensor, nr_points_along_axis: int, m
     - anchors (torch.tensor): the anchor points, of shape (3, M)
     - nr_points_along_axis (int): the number of points along the axis
     - margin, by how much to extend both positive and negative along the axis
+    - max_magnitude: the maximum magnitude of the anchor points
 
     outputs:
     - y (torch tensor): the points in a batch of shape (nr_points_along_axis*nr_points_along_axis, M)
@@ -748,8 +787,8 @@ def create_y_from_projection(anchors: torch.tensor, nr_points_along_axis: int, m
     - Z2 (torch tensor): the second axis of the meshgrid, of shape (nr_points_along_axis, nr_points_along_axis)
     """
     # create the meshgrid in Z-space, which is the 2D space given by the anchor points
-    line = torch.linspace(- margin, 1 + margin, nr_points_along_axis)
-    Z1, Z2 = torch.meshgrid(line, line)
+    line = torch.linspace(- margin, max_magnitude + margin, nr_points_along_axis)
+    Z1, Z2 = torch.meshgrid(line, line, indexing = 'ij')
     
     # reshape the mesh into a batch and create the three z values for the three anchor points
     z1 = Z1.reshape(-1)
@@ -827,7 +866,7 @@ def data_generator(A: torch.tensor, batch_size: int = 4, maximum_sparsity: int =
     return y, x  
 
 
-def get_regularization_loss(lista: LISTA, regularize_config: dict):
+def get_regularization_loss_smooth_jacobian(lista: LISTA, regularize_config: dict, loss_multiplier: torch.tensor, sum_of_loss_multiplier: float):
     """
     get the regularization loss for a LISTA module. This loss is defined as taking a 1D path along the input space, and then taking the jacobian. 
     From the jacobian, we extract the individual regions, based on the fact that the derivative is zero between the points inside a region.
@@ -861,34 +900,76 @@ def get_regularization_loss(lista: LISTA, regularize_config: dict):
     with torch.no_grad():
         differences = torch.mean(torch.abs(jacobian_over_time[:,1:,:] - jacobian_over_time[:,:-1,:]), dim = -1)
 
-    # step 7, loop the iterations, for each fold, calculate the loss
+    # step 7, randomly select a k (fold index)
+    k = torch.randint(0, nr_folds, (1,)).item()
+
+    # get the nr of knots, and the location of the knots
+    knot_locations = torch.nonzero(differences[k,:])[:,0]
+    nr_of_knots = len(knot_locations)
+
+    # step 8, loop over each region in the jacobian, except the two edge regions (first and last)
     regularization_loss = 0
-    # for k in range(nr_folds):
-    for k in range(nr_folds-1, nr_folds): # just do the last fold for now
-        # get the nr of knots, and the location of the knots
-        knot_locations = torch.nonzero(differences[k,:])[:,0]
-        nr_of_knots = len(knot_locations)
+    for region_idx in range(1,nr_of_knots):
+        # get the indices of the region
+        start_idx = knot_locations[region_idx-1].item()
+        end_idx   = knot_locations[region_idx].item()
 
-        # step 7, loop over each region in the jacobian, except the two edge regions (first and last)
-        for region_idx in range(1,nr_of_knots):
-            # get the indices of the region
-            start_idx = knot_locations[region_idx-1].item()
-            end_idx   = knot_locations[region_idx].item()
+        # get the value of the jacobian of this region, as well as its left and right neighbour
+        jacobian_region = jacobian_over_time[k, start_idx+1:end_idx+1, :]
 
-            # get the value of the jacobian of this region, as well as its left and right neighbour
-            jacobian_region = jacobian_over_time[k, start_idx+1:end_idx+1, :]
+        # calculate the loss, as the l1 loss to the jacobian of the closest neighbour
+        if differences[k, start_idx] < differences[k, end_idx]:
+            # the left neighbour is the closest
+            regularization_loss += torch.abs(jacobian_region - jacobian_over_time[k, start_idx, :]).mean()
+        else:
+            # the right neighbour is the closest   
+            regularization_loss += torch.abs(jacobian_region - jacobian_over_time[k, end_idx+1, :]).mean()
 
-            # calculate the loss, as the l1 loss to the jacobian of the closest neighbour
-            if differences[k, start_idx] < differences[k, end_idx]:
-                # the left neighbour is the closest
-                regularization_loss += torch.abs(jacobian_region - jacobian_over_time[k, start_idx, :]).mean()
-            else:
-                # the right neighbour is the closest   
-                regularization_loss += torch.abs(jacobian_region - jacobian_over_time[k, end_idx+1, :]).mean()
+    # multiply the loss by the loss multiplier that corresponds with K
+    regularization_loss = regularization_loss * loss_multiplier[k] * nr_folds / sum_of_loss_multiplier
+
 
     return regularization_loss
 
-def get_regularization_loss_2(lista: LISTA, regularize_config: dict):
+def get_regularization_loss_tv_jacobian(lista: LISTA, regularize_config: dict, loss_multiplier: torch.tensor, sum_of_loss_multiplier: float):
+    """
+    get the regularization loss for a LISTA module. This loss is defined as taking a 1D path along the input space, and then taking the jacobian. 
+    We then calculate the total-variation loss on the jacobian, which is the sum of the absolute differences between consecutive points.
+    This should smooth it out over time and recude the number of knots in the jacobian.
+    """
+    M, N = lista.A.shape
+
+    # step 1, generate a path
+    y = generate_path(M, regularize_config["nr_points_along_path"], regularize_config["path_delta"], regularize_config["anchor_point_std"], lista.device)
+
+    # step 2, inialize x and the jacboian
+    x, jacobian = lista.get_initial_x_and_jacobian(regularize_config["nr_points_along_path"], calculate_jacobian = True)
+
+    # step 3, initialze a jacobian over time tensor of shape (nr_fold, nr_points_along_path, N, M)
+    nr_folds = lista.K
+    jacobian_over_time = torch.zeros(nr_folds, regularize_config["nr_points_along_path"], N, M, device = lista.device)
+
+    # step 4, loop over the iterations, saving the jacobian at each iteration into the jacobian_over_time tensor
+    for k in range(nr_folds):
+        x, jacobian = lista.forward_at_iteration(x, y, k, jacobian)
+        jacobian_over_time[k] = jacobian
+
+    # step 5, reshape the jacobian_over_time tensor to (nr_folds, nr_points_along_path, N*M)
+    jacobian_over_time = jacobian_over_time.view(nr_folds, regularize_config["nr_points_along_path"], N*M)
+
+    # step 6, calculate the differences between consecutive points
+    with torch.no_grad():
+        differences = torch.mean(torch.abs(jacobian_over_time[:,1:,:] - jacobian_over_time[:,:-1,:]), dim = -1)
+
+    # step 7, multiply each fold with the loss multiplier
+    differences = differences * loss_multiplier.unsqueeze(1)
+
+    # step 8, calculate the total variation loss as the mean of all the differences
+    regularization_loss = torch.sum(torch.mean(differences, dim = 1))/sum_of_loss_multiplier
+
+    return regularization_loss
+
+def get_regularization_loss_tie_weights(lista: LISTA, regularize_config: dict):
     """
     This second regularization loss is imply an l1 norm between al W matrices of the lista module
     Note that lista.W1 is a parameter list, so we need to take the mean of all the W1 matrices
@@ -983,10 +1064,17 @@ def train_lista(lista: LISTA, data_generator, nr_iterations: int, forgetting_fac
 
         # now check if we need to regularize
         if regularize:
-            # regularization_loss = get_regularization_loss(lista, regularize_config)
-            regularization_loss = get_regularization_loss_2(lista, regularize_config)
+            if regularize_config["type"] == "smooth_jacobian":
+                regularization_loss = get_regularization_loss_smooth_jacobian(lista, regularize_config, loss_multiplier, sum_of_loss_multiplier)
+            elif regularize_config["type"] == "tv_jacobian":
+                regularization_loss = get_regularization_loss_tv_jacobian(lista, regularize_config, loss_multiplier, sum_of_loss_multiplier)
+            elif regularize_config["type"] == "tie_weights":
+                regularization_loss = get_regularization_loss_tie_weights(lista, regularize_config)
+            else:
+                raise ValueError("regularize_config['type'] is not valid")
+            
             regularization_loss *= regularize_config["weight"]
-            loss = 0.5 * reconstruction_loss + 0.5 * regularization_loss    
+            loss = reconstruction_loss + regularization_loss    
         else:
             loss = reconstruction_loss
 
@@ -1006,8 +1094,9 @@ def train_lista(lista: LISTA, data_generator, nr_iterations: int, forgetting_fac
             regularization_losses[i] = regularization_loss.item()
 
         # show the loss plot
-        batches = np.arange(i+1)+1
-        xmax = batches.max() if i > 0 else 2             # make sure the xmax is at least 2
+        batches = np.arange(i+1)
+        xmax = batches.max() if i > 0 else 1             # make sure the xmax is at least 2
+
 
         plt.figure()
         plt.plot(batches,losses[:i+1].cpu().numpy())
@@ -1017,6 +1106,7 @@ def train_lista(lista: LISTA, data_generator, nr_iterations: int, forgetting_fac
             plt.legend(["total loss", "reconstruction loss", "regularization loss"], loc='best')
 
         plt.xlim(batches.min(), xmax)
+        plt.ylim(0, 0.25)
         plt.grid()
         plt.title("loss over the batches")
         plt.xlabel("batch")
@@ -1150,13 +1240,17 @@ def support_accuracy_analysis(ista: ISTA, K: int, A: torch.tensor, y: torch.tens
         os.makedirs(save_folder)
 
     # create an accuracy array of size (K + 1)
-    accuracy_array = torch.zeros(K+1)
+    accuracy_array        = torch.zeros(K+1)
+    reconstruction_losses = torch.zeros(K+1)
 
     # run the initials function to get the initial x and jacobian
     x_hat, jacobian = ista.get_initial_x_and_jacobian(x.shape[0], calculate_jacobian = False)
 
     # get the initial support accuracy
     accuracy_array[0] = support_accuracy(x, x_hat)
+
+    # get the initial reconstruction loss
+    reconstruction_losses[0] = torch.mean(torch.abs(x_hat - x))
 
     # loop over the iterations of K
     for k in tqdm(range(K), position=tqdm_position, leave=tqdm_leave, disable=not verbose, desc="support accuracy analysis, runnning over folds"):
@@ -1165,6 +1259,9 @@ def support_accuracy_analysis(ista: ISTA, K: int, A: torch.tensor, y: torch.tens
 
         # calculate the support accuracy
         accuracy_array[k+1] = support_accuracy(x, x_hat)
+
+        # calculate the reconstruction loss
+        reconstruction_losses[k+1] = torch.mean(torch.abs(x_hat - x))
 
     # plot the support accuracy over the iterations
     plt.figure()
@@ -1176,12 +1273,27 @@ def support_accuracy_analysis(ista: ISTA, K: int, A: torch.tensor, y: torch.tens
     plt.title(save_name)
     plt.xlim([0,K])
     plt.tight_layout()
-    plt.savefig(f"{save_folder}/{save_name}.png", dpi=300, bbox_inches='tight')
-    plt.savefig(f"{save_folder}/{save_name}.svg", bbox_inches='tight')
+    plt.savefig(f"{save_folder}/{save_name}_support_accuracy.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"{save_folder}/{save_name}_support_accuracy.svg", bbox_inches='tight')
+    plt.close()
+
+    # plot the reconstruction loss over the iterations
+    plt.figure()
+    folds = np.arange(0,K+1)
+    plt.plot(folds,reconstruction_losses,'-', label = "reconstruction loss", color = color)
+    plt.yscale("log", base=2)
+    plt.xlabel("fold")
+    plt.ylabel("validation loss")
+    plt.grid()
+    plt.title(save_name)
+    plt.xlim([0,K])
+    plt.tight_layout()
+    plt.savefig(f"{save_folder}/{save_name}_validation_loss.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"{save_folder}/{save_name}_validation_loss.svg", bbox_inches='tight')
     plt.close()
 
     # give the knot density array back
-    return accuracy_array
+    return accuracy_array, reconstruction_losses
 
 
 # %% test the modules
