@@ -410,6 +410,10 @@ def visual_analysis_of_ista(ista: ISTA, K: int, nr_points_along_axis: int, margi
         sparsity_label, unique_labels = extract_sparsity_label_from_x(x)
         sparsity_label_reshaped = sparsity_label.reshape(nr_points_along_axis, nr_points_along_axis)
 
+        # compress the sparsity label to the unique labels
+        sparsity_label_reshaped = sparsity_label_reshaped.unique(return_inverse=True)[1].reshape(nr_points_along_axis, nr_points_along_axis)
+        unique_labels = sparsity_label_reshaped.unique()
+
         # create the three names of the anchor points
         anchor_names = ["anchor x-index: "] * 3
         for i in range(3):
@@ -1106,7 +1110,7 @@ def train_lista(lista: LISTA, data_generator, nr_iterations: int, forgetting_fac
             plt.legend(["total loss", "reconstruction loss", "regularization loss"], loc='best')
 
         plt.xlim(batches.min(), xmax)
-        plt.ylim(0, 0.25)
+        plt.ylim(0, 0.15)
         plt.grid()
         plt.title("loss over the batches")
         plt.xlabel("batch")
@@ -1143,7 +1147,7 @@ def train_lista(lista: LISTA, data_generator, nr_iterations: int, forgetting_fac
     return lista, losses
 
 # %% grid search for ISTA
-def grid_search_ista(A, data_generator, mus: np.array, _lambdas: np.array, K: int, forgetting_factor:float = 1.0, device: str="cpu", verbose: bool = True, tqdm_position: int = 0, tqdm_leave: bool = True):
+def grid_search_ista(A, data_generator, mus: np.array, _lambdas: np.array, K: int, forgetting_factor:float = 1.0, device: str="cpu", verbose: bool = True, tqdm_position: int = 0, tqdm_leave: bool = True, use_accuracy: bool = False):
     """
     perfrom a grid search for the best mu and lambda for the ISTA module. using the data generator.
     """
@@ -1169,13 +1173,23 @@ def grid_search_ista(A, data_generator, mus: np.array, _lambdas: np.array, K: in
             # run the ISTA module
             x_hat,_ = ista(y, verbose = False, return_intermediate = True, calculate_jacobian = False)
 
-            # because x_hat has the intermediate x's, we need to expand the x to the same shape, if it does not yet have the same shape
-            if len(x_hat.shape) != len(x.shape):
-                x = x.unsqueeze(2).expand_as(x_hat)
+            
 
-            # calculate the l1 loss over the K folds
-            loss_per_fold = torch.abs(x_hat - x).mean((0,1))
-            loss = torch.sum(loss_per_fold * loss_multiplier)/sum_of_loss_multiplier
+            if use_accuracy:
+                # calculate the support accuracy
+                accuracy = 0
+                for k in range(K):
+                    accuracy += support_accuracy(x_hat[:,:,k], x) * loss_multiplier[k] * 100.0 / sum_of_loss_multiplier
+                loss = 100 - accuracy
+                
+            else:
+                # because x_hat has the intermediate x's, we need to expand the x to the same shape, if it does not yet have the same shape
+                if len(x_hat.shape) != len(x.shape):
+                    x = x.unsqueeze(2).expand_as(x_hat)
+
+                # calculate the l1 loss over the K folds
+                loss_per_fold = torch.abs(x_hat - x).mean((0,1))
+                loss = torch.sum(loss_per_fold * loss_multiplier)/sum_of_loss_multiplier
 
             # save the loss
             grid[i,j] = loss
@@ -1205,7 +1219,6 @@ def support_accuracy(x1: torch.tensor, x2: torch.tensor):
     support_x1 = (x1 != 0).float()
     support_x2 = (x2 != 0).float()
 
-    
     # accuracy is simply the average number of times the support is the same times 100
     accuracy = torch.mean((support_x1 == support_x2)*100.0)
 

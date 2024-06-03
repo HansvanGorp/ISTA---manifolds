@@ -134,7 +134,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     mus = torch.linspace(config["ISTA"]["mu"]["min"], config["ISTA"]["mu"]["max"], config["ISTA"]["mu"]["nr_points"])
     _lambdas = torch.linspace(config["ISTA"]["lambda"]["min"], config["ISTA"]["lambda"]["max"], config["ISTA"]["lambda"]["nr_points"])
     mu, _lambda = ista.grid_search_ista(A, data_generator_initialized, mus, _lambdas, config["ISTA"]["nr_folds"], forgetting_factor = config["ISTA"]["weighting_for_first_fold"], device=config["device"],
-                                        tqdm_position=1, verbose=True, tqdm_leave=tqdm_leave)
+                                        tqdm_position=1, verbose=True, tqdm_leave=tqdm_leave, use_accuracy=config["ISTA"]["use_accuracy"])
 
     # save the results of the grid search in the results directroy in a .yaml file
     with open(os.path.join(results_dir_this_experiment, "grid_search_results.yaml"), 'a') as file:

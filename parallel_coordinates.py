@@ -129,6 +129,9 @@ def plot_df_as_parallel_coordinates(df, collumns_to_plot, color_collumn,
         color_values = np.zeros_like(color_values)
     else:
         color_values = (color_values - color_values.min()) / (color_values.max() - color_values.min())
+
+    # reverse the color values, so that the highest value is the lowest color
+    color_values = 1 - color_values
     
     # create the figure
     if host is None:
@@ -160,28 +163,6 @@ def plot_df_as_parallel_coordinates(df, collumns_to_plot, color_collumn,
             label.set_fontsize(12)
             label.set_path_effects([PathEffects.withStroke(linewidth=3, foreground='k')])
             label.set_color("w")
-
-    # change some collumn_names to be easier to read:
-    collum_names = [x.replace("knot_density_ista_max",  "Max Knot Density") for x in collum_names]
-    collum_names = [x.replace("knot_density_ista_end",  "End Knot Density") for x in collum_names]
-    collum_names = [x.replace("knot_density_lista_max", "Max Knot Density") for x in collum_names]
-    collum_names = [x.replace("knot_density_lista_end", "End Knot Density") for x in collum_names]
-    collum_names = [x.replace("knot_density_rlista_max", "Max Knot Density") for x in collum_names]
-    collum_names = [x.replace("knot_density_rlista_end", "End Knot Density") for x in collum_names]
-
-    collum_names = [x.replace("support_accuracy_ista_end_ood",  "Support Accuracy OOD") for x in collum_names]
-    collum_names = [x.replace("support_accuracy_lista_end_ood", "Support Accuracy OOD") for x in collum_names]
-    collum_names = [x.replace("support_accuracy_rlista_end_ood", "Support Accuracy OOD") for x in collum_names]
-    collum_names = [x.replace("support_accuracy_ista_end",  "Support Accuracy") for x in collum_names]
-    collum_names = [x.replace("support_accuracy_lista_end", "Support Accuracy") for x in collum_names]
-    collum_names = [x.replace("support_accuracy_rlista_end", "Support Accuracy") for x in collum_names]
-
-    collum_names = [x.replace("validation_loss_ista_end_ood", "Validation Loss OOD") for x in collum_names]
-    collum_names = [x.replace("validation_loss_lista_end_ood", "Validation Loss OOD") for x in collum_names]
-    collum_names = [x.replace("validation_loss_rlista_end_ood", "Validation Loss OOD") for x in collum_names]
-    collum_names = [x.replace("validation_loss_ista_end", "Validation Loss") for x in collum_names]
-    collum_names = [x.replace("validation_loss_lista_end", "Validation Loss") for x in collum_names]
-    collum_names = [x.replace("validation_loss_rlista_end", "Validation Loss") for x in collum_names]
     
     # set the x axis
     host.set_xlim(0, ys.shape[1] - 1)
