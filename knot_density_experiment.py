@@ -27,7 +27,7 @@ from training import grid_search_ista, train_lista, get_loss_on_dataset_over_fol
 from make_gif_from_figures_in_folder import make_gif_from_figures_in_folder
 
 # %% constants
-model_types = ["ISTA", "LISTA", "RLISTA"] # the model types we are comparing
+model_types = ["RLISTA", "LISTA", "ISTA"] # the model types we are comparing
 nr_of_model_types = len(model_types) # the number of models we are comparing, ISTA, LISTA and RLISTA
 colors = ["tab:blue", "tab:orange", "tab:green"] # the colors for the models
 

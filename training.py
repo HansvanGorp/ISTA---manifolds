@@ -132,7 +132,7 @@ def plot_loss(fraction_idx: torch.tensor, epoch_idx: torch.tensor, fractions: to
         plt.plot(fractions[:fraction_idx+1],train_losses[:fraction_idx+1,2].cpu().numpy(), label="regularization training loss", linestyle=":", c = train_color)
         plt.plot(epochs[:epoch_idx+1],val_losses[:epoch_idx+1,2].cpu().numpy(),          label="regularization validation loss", linestyle=":", c = val_color)
 
-    plt.xlim(0, fraction_idx)
+    plt.xlim(0, fractions[fraction_idx])
     plt.ylim(0, val_losses[:epoch_idx+1,0].max()*1.1)
     plt.grid()
     plt.title("loss over the batches")

@@ -211,6 +211,9 @@ def visual_analysis_of_ista(ista: ISTA, nr_folds: int, nr_points_along_axis: int
         nr_of_regions, norms, _ = extract_linear_regions_from_jacobian(jacobian)
         norms_reshaped = norms.reshape(nr_points_along_axis, nr_points_along_axis)
 
+        # apply log to the norms (+1, since 0 is not allowed)
+        norms_reshaped = torch.log(norms_reshaped + 1) 
+
         # extract the sparsity label from x
         sparsity_label, unique_labels = extract_sparsity_label_from_x(x)
         sparsity_label_reshaped = sparsity_label.reshape(nr_points_along_axis, nr_points_along_axis)
