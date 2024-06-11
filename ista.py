@@ -118,19 +118,19 @@ class ISTAPrototype(torch.nn.Module):
 
         return x, jacobian
 
-    def get_initial_x_and_jacobian(self, batch_size: int, calculate_jacobian: bool, jacobian_projection: torch.tensor = None):
-        return self.get_initial_x(batch_size), self.initalize_jacobian(batch_size, calculate_jacobian, jacobian_projection)
+    def get_initial_x_and_jacobian(self, batch_size: int, calculate_jacobian: bool, jacobian_projection: torch.tensor = None, overwite_device: str = None):
+        return self.get_initial_x(batch_size, overwite_device=overwite_device), self.initalize_jacobian(batch_size, calculate_jacobian, jacobian_projection,overwite_device=overwite_device)
     
-    def get_initial_x(self, batch_size: int):
+    def get_initial_x(self, batch_size: int, overwite_device: str = None):
         """
         Initializes the x vector.
 
         inputs:
         - batch_size (int): the batch size
         """
-        return torch.zeros(batch_size, self.N, dtype=torch.float32, device=self.device)
+        return torch.zeros(batch_size, self.N, dtype=torch.float32, device=self.device if overwite_device is None else overwite_device)
     
-    def initalize_jacobian(self, batch_size: int, calculate_jacobian: bool, jacobian_projection: torch.tensor):
+    def initalize_jacobian(self, batch_size: int, calculate_jacobian: bool, jacobian_projection: torch.tensor, overwite_device: str = None):
         """
         Initializes the Jacobian matrix.
 
@@ -141,11 +141,11 @@ class ISTAPrototype(torch.nn.Module):
         """
         if calculate_jacobian and jacobian_projection is None:
             # initialize the Jacobian with all zeros
-            jacobian = torch.zeros(batch_size, self.N, self.M, dtype=torch.float32, device=self.device)
+            jacobian = torch.zeros(batch_size, self.N, self.M, dtype=torch.float32, device=self.device if overwite_device is None else overwite_device)
 
         elif calculate_jacobian and jacobian_projection is not None:
             # initialize the Jacobian with all zeros in the 2D space
-            jacobian = torch.zeros(batch_size, self.N,       2, dtype=torch.float32, device=self.device)
+            jacobian = torch.zeros(batch_size, self.N,       2, dtype=torch.float32, device=self.device if overwite_device is None else overwite_device)
 
         else:
             # put it to None

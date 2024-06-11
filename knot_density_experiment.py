@@ -27,7 +27,7 @@ from training import grid_search_ista, train_lista, get_loss_on_dataset_over_fol
 from make_gif_from_figures_in_folder import make_gif_from_figures_in_folder
 
 # %% constants
-model_types = ["RLISTA", "LISTA", "ISTA"] # the model types we are comparing
+model_types = ["ISTA", "LISTA", "RLISTA"] # the model types we are comparing
 nr_of_model_types = len(model_types) # the number of models we are comparing, ISTA, LISTA and RLISTA
 colors = ["tab:blue", "tab:orange", "tab:green"] # the colors for the models
 
@@ -156,14 +156,16 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
         # visualize the results in a 2D plane
         hyperplane_config = config["Hyperplane"]
         if hyperplane_config["enabled"]:
-            hyperplane_folder = os.path.join(model_folder, "hyperplane")
+            hyperplane_folder_norm           = os.path.join(model_folder, "hyperplane","norm")  
+            hyperplane_folder_jacobian_label = os.path.join(model_folder, "hyperplane","jacobian_label")      
 
-            visual_analysis_of_ista(model, model_config["nr_folds"], hyperplane_config["nr_points_along_axis"], hyperplane_config["margin"], hyperplane_config["indices_of_projection"],
-                                    A, save_folder = hyperplane_folder, tqdm_position=1, tqdm_leave= tqdm_leave, verbose = True, magntiude=hyperplane_config["magnitude"])
-            
+            visual_analysis_of_ista(model, model_config, hyperplane_config, A, save_folder = hyperplane_folder_norm,           tqdm_position=1, tqdm_leave= tqdm_leave, verbose = True, color_by="norm")
+            visual_analysis_of_ista(model, model_config, hyperplane_config, A, save_folder = hyperplane_folder_jacobian_label, tqdm_position=1, tqdm_leave= tqdm_leave, verbose = True, color_by="jacobian_label")
+
             # make gifs of the results?
             if hyperplane_config["make_gif"]:
-                make_gif_from_figures_in_folder(hyperplane_folder,   10)
+                make_gif_from_figures_in_folder(hyperplane_folder_norm,   10)
+                make_gif_from_figures_in_folder(hyperplane_folder_jacobian_label, 10)
 
     # %% after looping over each model type, make combined plots of all model types together
     # create a directory for the combined results

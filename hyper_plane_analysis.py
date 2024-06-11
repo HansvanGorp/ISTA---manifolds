@@ -4,43 +4,134 @@ This script creates the functions used to analyze the linear regions of (RL)ISTA
 
 import torch
 from tqdm import tqdm
+import matplotlib
 import matplotlib.pyplot as plt
 import os
 import numpy as np
 import warnings
+from scipy.linalg import null_space
 
 from ista import ISTA
+from data_on_plane import DataOnPlane
+import ncolor
 
 # %% helper functions
-def extract_linear_regions_from_jacobian(jacobian: torch.tensor):
+class MapToColors:
+    def __init__(self, nr_colors: int, max_value:int = 1000000, max_nr_tries:int = 1000):
+        # create a mapping from 0 to max_value to 0 to nr_colors
+        # make it so that 0 maps to 0
+        # all other values from 1 to max_value map to 1 to nr_colors in random order
+
+        self.nr_colors = nr_colors
+        self.max_value = max_value
+        self.max_nr_tries = max_nr_tries
+
+        # random permutation of the values from 1 to max_value to create as many possible mappings
+        self.mapping = torch.cat([torch.zeros(1).long(), torch.randperm(self.max_value-1) + 1]).long()
+
+        # ensure that the mapping loops around to 0
+        self.mapping = self.mapping % (self.nr_colors-1) + 1
+
+        # make sure that 0 maps to 0
+        self.mapping[0] = 0     
+        
+
+    def __call__(self, x: torch.tensor):
+        # x runs from 0 to some unknown number, first all values from 1 to that unknown number,
+        # those we want to reararange in occurrence order, so that 1 is the largest region, 2 is the second largest region, and so on
+        # but we ignore the zero region, which is the zero norm region
+        # we can do this by using the mapping, which maps from 0 to max_value to 0 to nr_colors
+
+        # make sure that the x is a long and on the cpu
+        x = x.long().cpu()
+
+        # create an edge map of the input
+        edge_map_in_horizontal = x[:,1:] != x[:,:-1]
+        edge_map_in_vertical   = x[1:,:] != x[:-1,:]
+
+        # loop over the tries
+        for i in range(self.max_nr_tries):
+            # map the x to the colors
+            x_out = self.mapping[x]
+
+            # check that edges are perserved in the mapping
+            edge_map_out_horizontal = x_out[:,1:] != x_out[:,:-1]
+            edge_map_out_vertical   = x_out[1:,:] != x_out[:-1,:]
+
+            # get the difference between the edge maps
+            diff_horizontal = edge_map_in_horizontal != edge_map_out_horizontal
+            diff_vertical   = edge_map_in_vertical != edge_map_out_vertical
+
+            if torch.all(diff_horizontal == 0) and torch.all(diff_vertical == 0):
+                break
+
+            # change the mapping so that on of the differences is zero
+            if torch.all(diff_horizontal == 0):
+                look_at = diff_vertical
+            else:
+                look_at = diff_horizontal
+
+            idx_x, idx_y = torch.where(look_at == 1)
+            first_idx_x = idx_x[0]
+            first_idx_y = idx_y[0]
+
+            # swap the values at that index to a random value between 1 and nr_colors, in the hope that the edge is preserved next time
+            value_in = x[first_idx_x, first_idx_y]
+            self.mapping[value_in] = torch.randint(1, self.nr_colors, (1,))
+
+        else:
+            warnings.warn("could not create a valid mapping, edges are not preserved. Output map may be incorrect.")
+
+        return x_out
+
+
+def extract_linear_regions_from_jacobian(jacobian: torch.tensor, tolerance: float = None):
         """
-        Given a Jacobian matrix, extract the linear regions from it.
+        Given a Jacobian matrix, extract the linear regions from it. We also consider things the same region if they are within a certain tolerance of each other.
+        This tolerance is achieved by converting the float to a long. Before we do this, we multiply is by 1/tolerance, and then convert it to a long. This way, we can use the unique function to find the unique entries.
 
         inputs:
         - jacobian (torch.tensor): the Jacobian of the forward function, of shape (batch_size, N, M) or (batch_size, N, 2) if jacobian_projection was used, we will call the last dimension Z
+        - tolerance (float): the minimum l2 distance between the jacobian of regions to consider. Distances below this are considered the same region
 
         outputs:
         - nr_of_regions (int): the number of linear regions 
         - norms (torch.tensor of floats): the norm of the jacobian matrices in the same order as the linear regions of shape (batch_size)
         - unique_entries (torch.tensor): the unique entries of the jacobian, of shape (nr_of_regions, Z)
+        - jacobian_labels (torch.tensor of longs): of shape (batch_size) with each a unique label for each region, norm==0 always has label 0
         """
+        if tolerance is not None:
+            assert tolerance > 0, "tolerance should be non-negative and non-zero"
+
+        # if tolerence is non-zero, we need to multiply the jacobian by 1/tolerance and convert it to an integer
+        if tolerance is not None:
+            jacobian = torch.round((jacobian * 1/float(tolerance)))
 
         # get the shape of the jacobian
         batch_size, N, Z  = jacobian.shape # let's just call the last dimension Z for now
 
-        # calculate the norm of the jacobian
-        norms = torch.linalg.norm(jacobian.view(batch_size, N*Z), ord=2, dim=1)
-        
         # reshape jacobian to (batch, N*Z)
-        jacobian = jacobian.view(batch_size, N*Z)
-    
+        jacobian = jacobian.view(batch_size, N*Z) 
+
+        # calculate the norm of the jacobians
+        norms = torch.linalg.norm(jacobian, ord=2, dim=1)
+
+        # if tolerance is not none, cast it to a long now to speed up the unique function
+        if tolerance is not None:
+            jacobian = jacobian.long()
+
         # find the unique rows using consecutive on the sorted jacobian
-        unique_entries, _ = torch.unique(jacobian, dim=0, return_inverse=True)
-        nr_of_regions = len(unique_entries)
+        unique_entries, reverse_idxs = torch.unique(jacobian, dim=0, return_inverse=True)
+        nr_of_regions  = len(unique_entries)
+        
+        # create the labels, but figure out where the zero norm is
+        jacobian_labels = reverse_idxs + 1 # we add 1 to make sure the zero norm has label 0
+        zero_norm = (norms < 1e-16)
+        jacobian_labels[zero_norm] = 0
+        
+        return nr_of_regions, norms, unique_entries, jacobian_labels
 
-        return nr_of_regions, norms, unique_entries
-
-def create_y_from_projection(anchors: torch.tensor, nr_points_along_axis: int, margin: float = 0.5, max_magnitude: float = 1.0):
+def create_y_from_projection(anchors: torch.tensor, nr_points_along_axis: int, margin: float = 0.5, max_magnitude: float = 1.0, symmetric: bool = False):
     """
     Given three anchor points, create a meshgrid of y values that forms the plane of the three anchor points.
     The meshgrid is of size (nr_points_along_axis, nr_points_along_axis)
@@ -50,6 +141,7 @@ def create_y_from_projection(anchors: torch.tensor, nr_points_along_axis: int, m
     - nr_points_along_axis (int): the number of points along the axis
     - margin, by how much to extend both positive and negative along the axis
     - max_magnitude: the maximum magnitude of the anchor points
+    - symmetric: if True, the meshgrid is symmetric around the origin
 
     outputs:
     - y (torch tensor): the points in a batch of shape (nr_points_along_axis*nr_points_along_axis, M)
@@ -57,7 +149,10 @@ def create_y_from_projection(anchors: torch.tensor, nr_points_along_axis: int, m
     - Z2 (torch tensor): the second axis of the meshgrid, of shape (nr_points_along_axis, nr_points_along_axis)
     """
     # create the meshgrid in Z-space, which is the 2D space given by the anchor points
-    line = torch.linspace(- margin, max_magnitude + margin, nr_points_along_axis)
+    if symmetric:
+        line = torch.linspace(- (max_magnitude + margin), max_magnitude + margin, nr_points_along_axis)
+    else:
+        line = torch.linspace(- margin                  , max_magnitude + margin, nr_points_along_axis)
     Z1, Z2 = torch.meshgrid(line, line, indexing = 'ij')
     
     # reshape the mesh into a batch and create the three z values for the three anchor points
@@ -144,10 +239,11 @@ def extract_sparsity_label_from_x(x):
         labels = torch.unique(sparsity_label)
 
         return sparsity_label, labels
+
+    
 # %% visual analysis of ISTA along a hyperplane
-def visual_analysis_of_ista(ista: ISTA, nr_folds: int, nr_points_along_axis: int, margin: float, indices_of_projection: tuple[int,int,int], A: torch.tensor, 
-                            save_folder: str = "test_figures", tqdm_position: int = 0, tqdm_leave: bool = True, verbose: bool = False,
-                            magntiude: float = 1.0, magnitude_ood: float = None):
+def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:dict, A: torch.tensor, save_folder: str = "test_figures", #NOSONAR
+                            tqdm_position: int = 0, tqdm_leave: bool = True, verbose: bool = False, color_by: str = " norm"):
     """
     Creates a visual analysis of the ISTA module. This is done by visualizing the linear regions of the Jacobian, and the sparsity of the x-vector.
     We only visualize in part of the space, namely a hyperplane that passes through three anchor points. This hyperplane is embedded in y-space,
@@ -155,22 +251,41 @@ def visual_analysis_of_ista(ista: ISTA, nr_folds: int, nr_points_along_axis: int
 
     inputs:
     - ista: the ISTA module
-    - nr_folds: the number of iterations
-    - nr_points_along_axis: the number of points along the axis of the hyperplane
-    - margin: the margin around the hyperplane to visualize
-    - indices_of_projection: the indices of the anchor points, A none means the origin, a 0 means x=[1,0,0,0,..] and a 1 means x=[0,1,0,0,..], and so on.
+    - model_config: the configuration of the model with:
+        - nr_folds: the number of iterations
+    
+    - hyperplane_config: the configuration of the hyperplane with:
+        - nr_points_along_axis:     defaults to 1024    the number of points along the axis of the hyperplane
+        - margin:                   defaults to 0.5     the margin around the hyperplane to visualize
+        - indices_of_projection:    defaults to [~,0,1] the indices of the anchor points, A none means the origin, a 0 means x=[1,0,0,0,..] and a 1 means x=[0,1,0,0,..], and so on.
+        - magntiude:                defaults to 1       the magnitude of the anchor points, default is 1.0
+        - tolerance:                defaults to None    the minimum difference in jacboian to consider at all. if tolerance is e.g. 0.01 differnces smaller than that are trunctated 
+        - color_by:                 defaults to "norm"  what to color the regions by, either "norm" or "jacobian_label"
+        - draw_decision_boundary:   defaults to False   if True, draw the decision boundary of the sparsity of the x-vector
+        - plot_data_regions:        defaults to False   if True, plot the data regions in the 2D space
+
+
     - A: the matrix A in the equation y=Ax, of shape (M, N), with M<N, i.e. M is the measurement dimension and N is the signal dimension
     - save_folder: the folder to save the figures in
-
     - tqdm_position: the position of the tqdm bar
     - tqdm_leave: if True, leave the tqdm bar
     - verbose: if True, print a progress bar
-
-    - magntiude: the magnitude of the anchor points, default is 1.0
-    - magnitude_ood: the magnitude of the out of distribution anchor points, if None, we do not use out of distribution anchor points. 
-                     Note if we do this, the first anchor point should be the origin, i.e. indices_of_projection[0] should be None
-
     """
+    # get the model config
+    nr_folds = model_config["nr_folds"]
+
+    # get the hyperplane config, with hasattr to allow for defaults
+    nr_points_along_axis    = hyperplane_config.get("nr_points_along_axis", 1024)
+    margin                  = hyperplane_config.get("margin", 0.5)
+    indices_of_projection   = hyperplane_config.get("indices_of_projection", [None,0,1])
+    magntiude               = hyperplane_config.get("magnitude", 1.0)
+    tolerance               = hyperplane_config.get("tolerance", None)
+    draw_decision_boundary  = hyperplane_config.get("draw_decision_boundary", False)
+    plot_data_regions       = hyperplane_config.get("plot_data_regions", False)
+    data_region_extend      = hyperplane_config.get("data_region_extend", [0.5, 1.5])
+    K                       = hyperplane_config.get("K", 4)
+    symmetric               = hyperplane_config.get("symmetric", False)
+
     # create the save folder if it does not exist
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
@@ -180,11 +295,7 @@ def visual_analysis_of_ista(ista: ISTA, nr_folds: int, nr_points_along_axis: int
             os.remove(f"{save_folder}/{file}")
 
     # figure out if we need to up to magnitude
-    if magnitude_ood is not None:
-        max_magnitude = magnitude_ood
-        assert indices_of_projection[0] is None # if we are using magnitude_ood, the first anchor should be the origin
-    else:
-        max_magnitude = magntiude
+    max_magnitude = magntiude
 
     # we create a projection matrix that projects the jacobian to a 2d space, for visualization, this is done by specifying three anchor points
     # anchor point 0 is where the x-vector is [0,0,0,...,0]
@@ -194,7 +305,18 @@ def visual_analysis_of_ista(ista: ISTA, nr_folds: int, nr_points_along_axis: int
     jacobian_projection = create_jacobian_projection_from_anchors(y_anchors)
 
     # create y data from the projection
-    y,Z1,Z2 = create_y_from_projection(y_anchors, nr_points_along_axis, margin = margin, max_magnitude = max_magnitude)
+    y,Z1,Z2 = create_y_from_projection(y_anchors, nr_points_along_axis, margin = margin, max_magnitude = max_magnitude, symmetric = symmetric)
+
+    # create the xmin, xmax, ymin, ymax
+    if symmetric:
+        xmin = -max_magnitude - margin
+        ymin = -max_magnitude - margin
+    else:
+        xmin = -margin
+        ymin = -margin
+
+    xmax = max_magnitude + margin
+    ymax = max_magnitude + margin
 
     # run the initials function to get the initial x and jacobian
     x, jacobian = ista.get_initial_x_and_jacobian(y.shape[0], calculate_jacobian = True, jacobian_projection = jacobian_projection)
@@ -202,17 +324,21 @@ def visual_analysis_of_ista(ista: ISTA, nr_folds: int, nr_points_along_axis: int
     # create an array of nr regions over the iterations
     nr_regions_arrray = torch.zeros(nr_folds)
 
+    # if we are using jacboian labels, we need to create a map to colors object
+    if color_by == "jacobian_label":
+        map_to_colors = MapToColors(20)
+
+    # if we want to plot the data regions, we need to create a function that does this  
+    if plot_data_regions:
+        data_on_plane = DataOnPlane(A, data_region_extend, y_anchors, K=K, consider_partials=False, only_positive=True)
+
     # loop over the iterations
     for fold_idx in tqdm(range(nr_folds), position=tqdm_position, leave=tqdm_leave, disable=not verbose, desc="visual analysis of ISTA, runnning over folds"):
         with torch.no_grad():
             x, jacobian = ista.forward_at_iteration(x, y, fold_idx, jacobian, jacobian_projection)
 
         # extract the linear regions from the jacobian
-        nr_of_regions, norms, _ = extract_linear_regions_from_jacobian(jacobian)
-        norms_reshaped = norms.reshape(nr_points_along_axis, nr_points_along_axis)
-
-        # apply log to the norms (+1, since 0 is not allowed)
-        norms_reshaped = torch.log(norms_reshaped + 1) 
+        nr_of_regions, norms, _, jacobian_labels = extract_linear_regions_from_jacobian(jacobian, tolerance = tolerance)       
 
         # extract the sparsity label from x
         sparsity_label, unique_labels = extract_sparsity_label_from_x(x)
@@ -222,35 +348,53 @@ def visual_analysis_of_ista(ista: ISTA, nr_folds: int, nr_points_along_axis: int
         sparsity_label_reshaped = sparsity_label_reshaped.unique(return_inverse=True)[1].reshape(nr_points_along_axis, nr_points_along_axis)
         unique_labels = sparsity_label_reshaped.unique()
 
+        # figure out what to color by
+        if color_by == "norm":
+            norms_reshaped = norms.reshape(nr_points_along_axis, nr_points_along_axis)
+            norms_reshaped = torch.log(norms_reshaped + 1) 
+            color_data = norms_reshaped.cpu()
+            cmap = 'cividis'
+        elif color_by == "jacobian_label":
+            jacobian_labels_reshaped = jacobian_labels.reshape(nr_points_along_axis, nr_points_along_axis)
+            color_data = map_to_colors(jacobian_labels_reshaped).cpu()
+            cmap = 'tab20'
+        else:
+            raise ValueError("color_by should be either 'norm' or 'jacobian_label'")
+
         # create the three names of the anchor points
         anchor_names = ["anchor x-index: "] * 3
         for i in range(3):
             anchor_names[i] += str(indices_of_projection[i]) if indices_of_projection[i] is not None else "origin"
 
         # plot the results
-        plt.figure(figsize=(10, 10))
-        plt.title(f"number of linear regions: {nr_of_regions}")
-        plt.imshow(norms_reshaped.cpu(), extent=[-margin, max_magnitude + margin, -margin, max_magnitude + margin], cmap = 'cividis', vmin = 0, vmax = torch.quantile(norms_reshaped, 0.95), origin="lower", zorder = -10)
-        # scatter three points, at 0,0 and 1,0 and 0,1 and put a legen with the anchor points
-        plt.scatter(0,         0,         c= 'white', label = anchor_names[0], zorder = 10, marker='x', s = 50)
-        plt.scatter(magntiude, 0,         c= 'white', label = anchor_names[1], zorder = 10, marker='o', s = 50)
-        plt.scatter(0,         magntiude, c= 'white', label = anchor_names[2], zorder = 10, marker='s', s = 50)
+        dpi = matplotlib.rcParams['figure.dpi']
+        nr_pixels_along_axis = nr_points_along_axis
+        fig_size_along_axis = nr_pixels_along_axis / dpi
 
-        # add the ood anchor if it is there
-        if magnitude_ood is not None:
-            plt.scatter(magnitude_ood, 0,             c= 'white', label = anchor_names[1] + " ood", zorder = 10, marker='o', s = 50)
-            plt.scatter(0,             magnitude_ood, c= 'white', label = anchor_names[2] + " ood", zorder = 10, marker='s', s = 50)
-
-        plt.legend()
-
-        # put a contour plot around the sparsity labels
-        plt.contour(Z2, Z1, sparsity_label_reshaped.cpu(), levels=unique_labels.cpu(), colors='k', linewidths=1, linestyles='solid', extent=[-margin, max_magnitude + margin, -margin, max_magnitude + margin], zorder = 1, origin="lower")
+        fig = plt.figure(figsize=(fig_size_along_axis, fig_size_along_axis))
+        ax = fig.add_axes([0, 0, 1, 1])
+        ax.axis('off')
+        ax.imshow(color_data, extent=[xmin, xmax, ymin, ymax], cmap = cmap, vmin = 0, vmax = color_data.max(), origin="lower", zorder = -10)
         
-        # make the plot look nice
-        plt.tight_layout()
+        if plot_data_regions:
+            data_on_plane.plot_data_regions(show_legend=True, colors = ["white","white","white"], ax = ax)
+        # else: 
+        #     # scatter three points, at 0,0 and 1,0 and 0,1 and put a legen with the anchor points
+        #     plt.scatter(0,         0,         c= 'white', label = anchor_names[0], zorder = 10, marker='x', s = 50)
+        #     plt.scatter(magntiude, 0,         c= 'white', label = anchor_names[1], zorder = 10, marker='o', s = 50)
+        #     plt.scatter(0,         magntiude, c= 'white', label = anchor_names[2], zorder = 10, marker='s', s = 50)
+        #     plt.legend()
+
+        # # put a contour plot around the sparsity labels
+        if draw_decision_boundary:
+            ax.contour(Z2, Z1, sparsity_label_reshaped.cpu(), levels=unique_labels.cpu(), colors='k', linewidths=1, linestyles='solid', extent=[xmin, xmax, ymin, ymax], zorder = 1, origin="lower")
+        
+        # x and y limits
+        ax.set_xlim([xmin, xmax])
+        ax.set_ylim([ymin, ymax])
 
         # save the figure
-        plt.savefig(f"{save_folder}/iteration_{fold_idx}.png", dpi=300, bbox_inches='tight')
+        plt.savefig(f"{save_folder}/iteration_{fold_idx}.png")
         plt.close()
 
         # save the number of regions
@@ -268,3 +412,4 @@ def visual_analysis_of_ista(ista: ISTA, nr_folds: int, nr_points_along_axis: int
     plt.close()
 
     return nr_regions_arrray
+

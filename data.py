@@ -30,7 +30,9 @@ def data_generator(A: torch.tensor, nr_of_examples: int = 4, maximum_sparsity: i
     - x (torch.tensor): the x-vector, of shape (nr_of_examples, N)
     """
     # create a random x-vector
-    x = torch.rand(nr_of_examples, N) * (x_magnitude[1] - x_magnitude[0]) + x_magnitude[0]
+    sign      = torch.randint(0, 2, (nr_of_examples, N)) * 2 - 1
+    magnitude = torch.rand(nr_of_examples, N) * (x_magnitude[1] - x_magnitude[0]) + x_magnitude[0]
+    x         = sign * magnitude
 
     # create a mask that makes sure the x-vector is at most maximum_sparsity, or even less than that
     mask = torch.zeros(nr_of_examples, N)
