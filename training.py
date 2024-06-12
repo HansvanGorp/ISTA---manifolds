@@ -13,22 +13,6 @@ from ista import ISTA, LISTA
 from data import data_generator, ISTAData
 from knot_density_analysis import generate_path
 
-# %% loss on entire dataset
-def get_loss_on_dataset_over_folds(model: ISTA, datset: ISTAData):
-    """
-    get the loss of a model on an entire dataset over the folds
-    """
-
-    y, x = datset.y, datset.x
-
-    with torch.no_grad():
-        x_hat,_ = model(y, verbose = False, return_intermediate = True, calculate_jacobian = False)
-        x = x.unsqueeze(2).expand_as(x_hat).to(x_hat.device)
-
-    loss_per_fold = torch.abs(x_hat - x).mean(dim = (0,1)).cpu()
-
-    return loss_per_fold
-
 # %% ISTA
 def grid_search_ista(model: ISTA, train_data: ISTAData, validation_data: ISTAData, model_config: dict, tqdm_position: int=0, verbose: bool=True, tqdm_leave: bool=True):
     """
@@ -54,14 +38,10 @@ def grid_search_ista(model: ISTA, train_data: ISTAData, validation_data: ISTADat
             model.reset_params_using_mu_and_lambda(mu, _lambda)
             
             # run the ISTA module
-            x_hat,_ = model(y, verbose = False, return_intermediate = True, calculate_jacobian = False)
-
-            # because x_hat has the intermediate x's, we need to expand the x to the same shape, if it does not yet have the same shape
-            if len(x_hat.shape) != len(x.shape):
-                x = x.unsqueeze(2).expand_as(x_hat).to(x_hat.device)
+            x_hat,_ = model(y, verbose = False, return_intermediate = True, calculate_jacobian = False)           
 
             # calculate the l1 loss over the K folds
-            losses[i,j] = torch.abs(x_hat - x).mean()
+            losses[i,j] = get_reconstruction_loss(x,x_hat)
 
     # step 4, find the best mu and lambda
     best_idx = torch.argmin(losses)
@@ -78,9 +58,25 @@ def grid_search_ista(model: ISTA, train_data: ISTAData, validation_data: ISTADat
     return model, best_mu, best_lambda
 
 # %% LISTA
+def get_loss_on_dataset_over_folds(model: ISTA, datset: ISTAData):
+    """
+    get the loss of a model on an entire dataset over the folds
+    """
+
+    y, x = datset.y, datset.x
+
+    with torch.no_grad():
+        x_hat,_ = model(y, verbose = False, return_intermediate = True, calculate_jacobian = False)
+        x = x.unsqueeze(2).expand_as(x_hat).to(x_hat.device)
+
+    loss_per_fold = ((torch.abs((x_hat - x)**2).mean(dim=(0,1)))**0.5).cpu()
+
+    return loss_per_fold
+
+
 def calculate_loss(x_hat: torch.tensor, x: torch.tensor, model: LISTA, model_config: dict, regularize: bool=False):
     # calculate the l1 loss over the K folds
-    reconstruction_loss = torch.abs(x_hat - x).mean()
+    reconstruction_loss = get_reconstruction_loss(x, x_hat)
 
     # now check if we need to regularize
     if regularize:
@@ -92,6 +88,22 @@ def calculate_loss(x_hat: torch.tensor, x: torch.tensor, model: LISTA, model_con
     total_loss = reconstruction_loss + regularization_loss
 
     return total_loss, reconstruction_loss, regularization_loss
+
+def get_reconstruction_loss(x: torch.tensor, x_hat: torch.tensor):
+    """
+    get the loss of a batch of x_hat compared to x
+    """
+    # make x and x_hat on the same device
+    x = x.to(x_hat.device)
+
+    # make the x and x_hat the same shape
+    if len(x_hat.shape) != len(x.shape):
+        x = x.unsqueeze(2).expand_as(x_hat)
+        
+    # calculate loss
+    loss = (torch.abs((x_hat - x)**2).mean())**0.5
+
+    return loss
 
 def go_over_validation_set(model: LISTA, dataloader_val: torch.utils.data.DataLoader, model_config: dict, regularize: bool=False, tqdm_position: int=0, verbose: bool=True, tqdm_leave: bool=True):
     model.eval()
@@ -142,11 +154,17 @@ def plot_loss(fraction_idx: torch.tensor, epoch_idx: torch.tensor, fractions: to
     plt.tight_layout()
     
     if loss_folder is None:
-        plt.savefig(f"loss_{save_name}.jpg", dpi=300, bbox_inches='tight')
-        plt.savefig(f"loss_{save_name}.svg", bbox_inches='tight')
+        try:
+            plt.savefig(f"loss_{save_name}.jpg", dpi=300, bbox_inches='tight')
+            plt.savefig(f"loss_{save_name}.svg", bbox_inches='tight')
+        except: #NOSONAR
+            pass #sometimes the plot is not saved, but that is not a problem, we will save it next time
     else:
-        plt.savefig(f"{loss_folder}/loss_{save_name}.jpg", dpi=300, bbox_inches='tight')
-        plt.savefig(f"{loss_folder}/loss_{save_name}.svg", bbox_inches='tight')
+        try:
+            plt.savefig(f"{loss_folder}/loss_{save_name}.jpg", dpi=300, bbox_inches='tight')
+            plt.savefig(f"{loss_folder}/loss_{save_name}.svg", bbox_inches='tight')
+        except: #NOSONAR
+            pass #sometimes the plot is not saved, but that is not a problem, we will save it next time
 
     if show_loss_plot:
         plt.show()

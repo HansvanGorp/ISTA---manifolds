@@ -37,7 +37,7 @@ def data_generator(A: torch.tensor, nr_of_examples: int = 4, maximum_sparsity: i
     # create a mask that makes sure the x-vector is at most maximum_sparsity, or even less than that
     mask = torch.zeros(nr_of_examples, N)
     for i in range(nr_of_examples):
-        sparsity = torch.randint(0, maximum_sparsity+1, (1,))
+        sparsity = torch.randint(1, maximum_sparsity+1, (1,))
         x_indices = torch.randperm(N)[:sparsity]
         mask[i, x_indices] = 1
 

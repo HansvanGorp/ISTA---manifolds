@@ -377,7 +377,7 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
         ax.imshow(color_data, extent=[xmin, xmax, ymin, ymax], cmap = cmap, vmin = 0, vmax = color_data.max(), origin="lower", zorder = -10)
         
         if plot_data_regions:
-            data_on_plane.plot_data_regions(show_legend=True, colors = ["white","white","white"], ax = ax)
+            data_on_plane.plot_data_regions(show_legend=False, colors = ["white","white","white"], ax = ax)
         # else: 
         #     # scatter three points, at 0,0 and 1,0 and 0,1 and put a legen with the anchor points
         #     plt.scatter(0,         0,         c= 'white', label = anchor_names[0], zorder = 10, marker='x', s = 50)

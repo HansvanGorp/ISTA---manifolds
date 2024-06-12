@@ -2,10 +2,10 @@
 # this yaml file contains the settings used for the knot density experiment
 
 # general parameters
-device: "cuda:6" # device to run the experiment on
-results_dir: "new_train_16384_examples" 
+device: "cuda:0" # device to run the experiment on
+results_dir: "test_K4_M8_N64_nr16384"
 seed: 1 # seed for reproducibility
-max_nr_of_experiments: 32 # maximum number of experiments to run
+max_nr_of_experiments: 1 # maximum number of experiments to run
 
 # we want to run the experiment in different contexts of dimension sizes and sparsity levels of x
 # y dimension M, x dimension N, sparsity in x of K, each described by a range
@@ -15,15 +15,15 @@ data_that_varies:
     min: 4
     max: 4
   M:
-    min: 16
-    max: 16
+    min: 8
+    max: 8
   N:
     min: 64
     max: 64
 
 data_that_stays_constant:
-  x_magnitude: [0.5, 1.5]
-  noise_std: 0.05
+  x_magnitude: [1, 2]
+  noise_std: 0.1
   nr_training_samples:   16384
   nr_validation_samples: 1024
   nr_test_samples:       1024
@@ -45,7 +45,7 @@ LISTA:
   nr_folds: 128
   batch_size: 32
   nr_of_epochs: 100
-  learning_rate: 0.001
+  learning_rate: 0.01
   patience: 5
   initial_mu: 1.0
   initial_lambda: 0.05
@@ -55,7 +55,7 @@ RLISTA:
   nr_folds: 128
   batch_size: 32
   nr_of_epochs: 100
-  learning_rate: 0.001
+  learning_rate: 0.01
   patience: 5
   initial_mu: 1.0
   initial_lambda: 0.05
@@ -76,17 +76,17 @@ Path:
 
 # hyperplane parameters
 Hyperplane:
-  enabled: False # bool to decide if we want to perform the hyperplane experiment
+  enabled: True # bool to decide if we want to perform the hyperplane experiment
   nr_points_along_axis: 1024 # number of points to sample along the axis
   indices_of_projection: [~,0,1] # The indices of the anchor points, aka, which k-sparse vector to project onto. 
                                  #A none means the origin, a 0 means x=[1,0,0,0,..] and a 1 means x=[0,1,0,0,..], and so on.
                                  # for now, this only support with None always as the first element
-  magnitude: 1.5     # the magnitude to choose for the first anchor points, ie, x = x * magnitude
+  magnitude: 2       # the magnitude to choose for the first anchor points, ie, x = x * magnitude
   margin: 0.5        # the additional margin to extend the hyperplane by
   symmetric: False   # bool to decide if we want to make the hyperplane symmetric
   tolerance: ~       # the minimum difference in values of the jacobian to consider. If ~, uses machine precision
-  draw_decision_boundary: False # bool to decide if we want to draw the decision boundary
+  draw_decision_boundary: True # bool to decide if we want to draw the decision boundary
   plot_data_regions: True # bool tpo decide if we want to plot the data regions
-  data_region_extend: [0.5, 1.5] # the extend of the data region, ie, the range of the data
+  data_region_extend: [1, 2] # the extend of the data region, ie, the range of the data
   K: 2               # the sparsity level of the data to consider for plotting
   make_gif: True     # bool to decide if we want to make a gif of the hyperplane experiment

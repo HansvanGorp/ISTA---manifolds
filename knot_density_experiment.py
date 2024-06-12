@@ -156,15 +156,15 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
         # visualize the results in a 2D plane
         hyperplane_config = config["Hyperplane"]
         if hyperplane_config["enabled"]:
-            hyperplane_folder_norm           = os.path.join(model_folder, "hyperplane","norm")  
+            #hyperplane_folder_norm           = os.path.join(model_folder, "hyperplane","norm")  
             hyperplane_folder_jacobian_label = os.path.join(model_folder, "hyperplane","jacobian_label")      
 
-            visual_analysis_of_ista(model, model_config, hyperplane_config, A, save_folder = hyperplane_folder_norm,           tqdm_position=1, tqdm_leave= tqdm_leave, verbose = True, color_by="norm")
+            #visual_analysis_of_ista(model, model_config, hyperplane_config, A, save_folder = hyperplane_folder_norm,           tqdm_position=1, tqdm_leave= tqdm_leave, verbose = True, color_by="norm")
             visual_analysis_of_ista(model, model_config, hyperplane_config, A, save_folder = hyperplane_folder_jacobian_label, tqdm_position=1, tqdm_leave= tqdm_leave, verbose = True, color_by="jacobian_label")
 
             # make gifs of the results?
             if hyperplane_config["make_gif"]:
-                make_gif_from_figures_in_folder(hyperplane_folder_norm,   10)
+                #make_gif_from_figures_in_folder(hyperplane_folder_norm,   10)
                 make_gif_from_figures_in_folder(hyperplane_folder_jacobian_label, 10)
 
     # %% after looping over each model type, make combined plots of all model types together
