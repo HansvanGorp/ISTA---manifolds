@@ -2,10 +2,10 @@
 # this yaml file contains the settings used for the knot density experiment
 
 # general parameters
-device: "cuda:0" # device to run the experiment on
-results_dir: "new_train_1024_examples" 
+device: "cuda:6" # device to run the experiment on
+results_dir: "new_train_16384_examples" 
 seed: 1 # seed for reproducibility
-max_nr_of_experiments: 1 # maximum number of experiments to run
+max_nr_of_experiments: 32 # maximum number of experiments to run
 
 # we want to run the experiment in different contexts of dimension sizes and sparsity levels of x
 # y dimension M, x dimension N, sparsity in x of K, each described by a range
@@ -24,13 +24,13 @@ data_that_varies:
 data_that_stays_constant:
   x_magnitude: [0.5, 1.5]
   noise_std: 0.05
-  nr_training_samples:   1024
-  nr_validation_samples: 128
+  nr_training_samples:   16384
+  nr_validation_samples: 1024
   nr_test_samples:       1024
 
 # ISTA parameters
 ISTA:
-  nr_folds: 256
+  nr_folds: 128
   mu:
     min: 0.01
     max: 1
@@ -42,7 +42,7 @@ ISTA:
 
 # LISTA parameters (Learned ISTA)
 LISTA:
-  nr_folds: 256
+  nr_folds: 128
   batch_size: 32
   nr_of_epochs: 100
   learning_rate: 0.001
@@ -52,7 +52,7 @@ LISTA:
 
 # RLISTA parameters (Regularized - Learned - ISTA)
 RLISTA:
-  nr_folds: 256
+  nr_folds: 128
   batch_size: 32
   nr_of_epochs: 100
   learning_rate: 0.001
@@ -76,7 +76,7 @@ Path:
 
 # hyperplane parameters
 Hyperplane:
-  enabled: True # bool to decide if we want to perform the hyperplane experiment
+  enabled: False # bool to decide if we want to perform the hyperplane experiment
   nr_points_along_axis: 1024 # number of points to sample along the axis
   indices_of_projection: [~,0,1] # The indices of the anchor points, aka, which k-sparse vector to project onto. 
                                  #A none means the origin, a 0 means x=[1,0,0,0,..] and a 1 means x=[0,1,0,0,..], and so on.
