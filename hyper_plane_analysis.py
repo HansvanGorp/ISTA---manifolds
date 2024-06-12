@@ -79,9 +79,6 @@ class MapToColors:
             value_in = x[first_idx_x, first_idx_y]
             self.mapping[value_in] = torch.randint(1, self.nr_colors, (1,))
 
-        else:
-            warnings.warn("could not create a valid mapping, edges are not preserved. Output map may be incorrect.")
-
         return x_out
 
 

@@ -101,7 +101,7 @@ def get_reconstruction_loss(x: torch.tensor, x_hat: torch.tensor):
         x = x.unsqueeze(2).expand_as(x_hat)
         
     # calculate loss
-    loss = (torch.abs((x_hat - x)**2).mean())**0.5
+    loss = ((x_hat - x)**2).mean()
 
     return loss
 
@@ -145,7 +145,7 @@ def plot_loss(fraction_idx: torch.tensor, epoch_idx: torch.tensor, fractions: to
         plt.plot(epochs[:epoch_idx+1],val_losses[:epoch_idx+1,2].cpu().numpy(),          label="regularization validation loss", linestyle=":", c = val_color)
 
     plt.xlim(0, fractions[fraction_idx])
-    plt.ylim(0, val_losses[:epoch_idx+1,0].max()*1.1)
+    plt.ylim(0, val_losses[:epoch_idx+1,0].max()*1.5)
     plt.grid()
     plt.title("loss over the batches")
     plt.xlabel("epoch")

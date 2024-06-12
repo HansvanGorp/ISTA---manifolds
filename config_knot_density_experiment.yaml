@@ -6,6 +6,8 @@ device: "cuda:0" # device to run the experiment on
 results_dir: "test_K4_M8_N64_nr16384"
 seed: 1 # seed for reproducibility
 max_nr_of_experiments: 1 # maximum number of experiments to run
+A_with_good_singular_values: False # bool to decide if we want to generate A with good singular values or just randomly
+
 
 # we want to run the experiment in different contexts of dimension sizes and sparsity levels of x
 # y dimension M, x dimension N, sparsity in x of K, each described by a range
@@ -45,7 +47,7 @@ LISTA:
   nr_folds: 128
   batch_size: 32
   nr_of_epochs: 100
-  learning_rate: 0.01
+  learning_rate: 0.001
   patience: 5
   initial_mu: 1.0
   initial_lambda: 0.05
@@ -55,7 +57,7 @@ RLISTA:
   nr_folds: 128
   batch_size: 32
   nr_of_epochs: 100
-  learning_rate: 0.01
+  learning_rate: 0.001
   patience: 5
   initial_mu: 1.0
   initial_lambda: 0.05
@@ -76,7 +78,7 @@ Path:
 
 # hyperplane parameters
 Hyperplane:
-  enabled: True # bool to decide if we want to perform the hyperplane experiment
+  enabled: False # bool to decide if we want to perform the hyperplane experiment
   nr_points_along_axis: 1024 # number of points to sample along the axis
   indices_of_projection: [~,0,1] # The indices of the anchor points, aka, which k-sparse vector to project onto. 
                                  #A none means the origin, a 0 means x=[1,0,0,0,..] and a 1 means x=[0,1,0,0,..], and so on.

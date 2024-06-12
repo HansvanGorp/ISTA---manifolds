@@ -25,6 +25,16 @@ def create_random_matrix_with_good_singular_values(M: int, N: int):
 
     return A
 
+def create_random_matrix(M: int, N: int):
+    """
+    This function creates a random matrix A.
+    """
+
+    # create a random matrix A
+    A = torch.randn(M, N) * 0.1
+
+    return A
+
 
 def sample_experiment(config: dict, max_tries: int = 1000):
     """
@@ -45,6 +55,9 @@ def sample_experiment(config: dict, max_tries: int = 1000):
         raise ValueError("Could not find valid parameters after {} tries.".format(max_tries))
 
     # create the A matrix that belongs to these parameters
-    A = create_random_matrix_with_good_singular_values(M, N)
+    if config["A_with_good_singular_values"]:
+        A = create_random_matrix_with_good_singular_values(M, N)
+    else:
+        A = create_random_matrix(M, N)
     
     return M, N, K, A
