@@ -162,13 +162,14 @@ def create_y_from_projection(anchors: torch.tensor, nr_points_along_axis: int, m
     # return the results
     return y, Z1, Z2
 
-def create_anchors_from_x_indices(indices: tuple[int,int,int], A:torch.tensor):
+def create_anchors_from_x_indices(indices: tuple[int,int,int], A:torch.tensor, anchor_on_y_instead: bool = False):
     """
     creates anchor points given two indices that should be non-zero in the x-vector.
 
     inputs:
     - indices: which indices should be non-zero for the x-vectors used to create the three anchor points, if an index is None, that x-vector will be all zeros
     - A (torch.tensor): the matrix A in the equation y=Ax, of shape (M, N), with M<N, i.e. M is the measurement dimension and N is the signal dimension
+    - anchor_on_y_instead: if False, create the anchor points from the x-indices, if True, create the anchor points from the y-indices
 
     outputs:
     - y_anchors (torch.tensor): the y-anchors, of shape (3, M)
@@ -185,6 +186,15 @@ def create_anchors_from_x_indices(indices: tuple[int,int,int], A:torch.tensor):
             x_anchors[i, indices[i]] = 1
 
         y_anchors[i] = A @ x_anchors[i]
+
+    # check if we overwrite the anchor points
+    if anchor_on_y_instead:
+        # create the anchor points from the x-indices
+        x_anchors = torch.zeros(3, N)
+        y_anchors = torch.zeros(3, M)
+        for i in range(3):
+            if indices[i] is not None:
+                y_anchors[i, indices[i]] = 1
 
     return y_anchors, x_anchors
 
@@ -275,6 +285,7 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
     nr_points_along_axis    = hyperplane_config.get("nr_points_along_axis", 1024)
     margin                  = hyperplane_config.get("margin", 0.5)
     indices_of_projection   = hyperplane_config.get("indices_of_projection", [None,0,1])
+    anchor_on_y_instead     = hyperplane_config.get("anchor_on_y_instead", False)
     magntiude               = hyperplane_config.get("magnitude", 1.0)
     tolerance               = hyperplane_config.get("tolerance", None)
     draw_decision_boundary  = hyperplane_config.get("draw_decision_boundary", False)
@@ -296,7 +307,7 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
 
     # we create a projection matrix that projects the jacobian to a 2d space, for visualization, this is done by specifying three anchor points
     # anchor point 0 is where the x-vector is [0,0,0,...,0]
-    y_anchors, _ = create_anchors_from_x_indices(indices_of_projection, A)
+    y_anchors, _ = create_anchors_from_x_indices(indices_of_projection, A, anchor_on_y_instead= anchor_on_y_instead)
     
     # create the projection matrix
     jacobian_projection = create_jacobian_projection_from_anchors(y_anchors)
