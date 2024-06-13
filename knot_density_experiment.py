@@ -23,7 +23,7 @@ from knot_density_analysis import knot_density_analysis
 from hyper_plane_analysis  import visual_analysis_of_ista
 from parallel_coordinates import plot_df_as_parallel_coordinates
 from data import create_train_validation_test_datasets
-from training import grid_search_ista, train_lista, get_loss_on_dataset_over_folds
+from training import grid_search_ista, train_lista, get_loss_on_dataset_over_folds, get_support_accuracy_on_dataset_over_folds
 from make_gif_from_figures_in_folder import make_gif_from_figures_in_folder
 
 # %% constants
@@ -66,6 +66,7 @@ print("\nStarting the experiments")
 # inialize lists to store the results, to show them together in the end
 knot_density_over_experiments  = [[] for _ in range(nr_of_model_types)]
 test_loss_over_experiments     = [[] for _ in range(nr_of_model_types)]
+test_accuracy_over_experiments = [[] for _ in range(nr_of_model_types)]
 
 # initiale the df for the parallel coordinates plot, each row will be an experiment
 # the df has the following columns: M, N, K, noise_std, mu, lambda, knot_density_ista_max,  knot_density_ista_end, knot_density_lista_max, knot_density_lista_end
@@ -118,11 +119,16 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
             model = ista.ISTA(A, mu = 0, _lambda = 0, nr_folds = model_config["nr_folds"], device = config["device"])
 
             # perform grid search on ISTA for the best lambda and mu for these parameters
-            model, mu, _lambda = grid_search_ista(model, train_data, validation_data, model_config, tqdm_position=1, verbose=True, tqdm_leave=tqdm_leave)
+            model, mu, _lambda, accuracies, tested_mus, tested_lambdas = grid_search_ista(model, train_data, validation_data, model_config, tqdm_position=1, verbose=True, tqdm_leave=tqdm_leave)
             
             # save the results of the grid search in the results directroy in a .yaml file
-            with open(os.path.join(model_folder, "grid_search_results.yaml"), 'a') as file:
-                yaml.dump({"mu": mu.cpu().item(), "lambda": _lambda.cpu().item()}, file)            
+            with open(os.path.join(model_folder, "best_mu_and_lambda.yaml"), 'a') as file:
+                yaml.dump({"mu": mu.cpu().item(), "lambda": _lambda.cpu().item()}, file)   
+
+            # put the accuracies in a .csv file, with the tested mus and lambdas as the rows and columns
+            df = pd.DataFrame(accuracies, index=tested_mus, columns=tested_lambdas)
+            df.to_csv(os.path.join(model_folder, "accuracies.csv"))
+
 
         # otherwise, the model is LISTA or RLISTA, and needs to be trained
         else:
@@ -147,11 +153,13 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
 
         # evaluate the model on the test set
         test_loss = get_loss_on_dataset_over_folds(model, test_data)
+        test_accuracy = get_support_accuracy_on_dataset_over_folds(model, test_data)
 
         # save the test loss in a .tar file and to the lists
         torch.save(test_loss, os.path.join(model_folder, "test_loss.tar"))
         test_loss_over_experiments[model_idx].append(test_loss)
-
+        torch.save(test_accuracy, os.path.join(model_folder, "test_accuracy.tar"))
+        test_accuracy_over_experiments[model_idx].append(test_accuracy)
 
         # visualize the results in a 2D plane
         hyperplane_config = config["Hyperplane"]
@@ -212,6 +220,27 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     plt.savefig(os.path.join(combined_folder, "test_loss.svg"), bbox_inches='tight')
     plt.close()
 
+    # make a joint plot of the test accuracies
+    plt.figure()
+
+    max_folds = 0
+    for model_idx, model_type in enumerate(model_types):
+        test_accuracy = test_accuracy_over_experiments[model_idx][-1]
+        folds = np.arange(0, len(test_accuracy))
+        plt.plot(folds, test_accuracy, label = model_type, c = colors[model_idx])
+        max_folds = max(max_folds, len(test_accuracy))
+
+    plt.grid()
+    plt.xlabel("fold")
+    plt.ylabel("test accuracy")
+    plt.legend(loc='best')
+    plt.xlim([0,max_folds-1])
+    plt.tight_layout()
+    plt.savefig(os.path.join(combined_folder, "test_accuracy.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(combined_folder, "test_accuracy.svg"), bbox_inches='tight')
+    plt.close()
+
+
     # %% now plot the results across all experiments
     # mean and standard deviation of the knot densities
     plt.figure()
@@ -263,6 +292,31 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     plt.savefig(os.path.join(results_dir_with_parent, "test_loss.svg"), bbox_inches='tight')
     plt.close()
 
+    # mean and standard deviation of the test accuracies
+    plt.figure()
+
+    max_folds = 0
+    for model_idx, model_type in enumerate(model_types):
+        test_accuracy_over_experiments_this_model = test_accuracy_over_experiments[model_idx]
+        test_accuracy_over_experiments_this_model = torch.stack(test_accuracy_over_experiments_this_model)
+        test_accuracy_mean = test_accuracy_over_experiments_this_model.mean(dim=0)
+        test_accuracy_std  = test_accuracy_over_experiments_this_model.std(dim=0)
+        folds = np.arange(0, len(test_accuracy_mean))
+        plt.plot(folds, test_accuracy_mean, label = model_type, c = colors[model_idx])
+        plt.fill_between(folds, test_accuracy_mean - test_accuracy_std, test_accuracy_mean + test_accuracy_std, alpha=0.3, color=colors[model_idx])
+        max_folds = max(max_folds, len(test_accuracy_mean))
+
+    plt.grid()
+    plt.xlabel("fold")
+    plt.ylabel("test accuracy")
+    plt.legend(loc='best')
+    plt.xlim([0,max_folds-1])
+    plt.title("mean and std of the test accuracy per fold over the random experiments")
+    plt.tight_layout()
+    plt.savefig(os.path.join(results_dir_with_parent, "test_accuracy.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(results_dir_with_parent, "test_accuracy.svg"), bbox_inches='tight')
+    plt.close()
+
 
     # add results to the df for the parallel coordinates plot
     new_row = pd.DataFrame({"M": M, "N": N, "K": K}, index=[0])
@@ -276,6 +330,9 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
         test_loss_last_experiment_this_model = test_loss_over_experiments[model_idx][-1]
         new_row[model_type+"_test_loss_end"] = test_loss_last_experiment_this_model[-1].item()
 
+        test_accuracy_last_experiment_this_model = test_accuracy_over_experiments[model_idx][-1]
+        new_row[model_type+"_test_accuracy_end"] = test_accuracy_last_experiment_this_model[-1].item()
+
 
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_csv(os.path.join(results_dir_with_parent, "parameters.csv"))
@@ -284,8 +341,9 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     for model_idx, model_type in enumerate(model_types):
         fig, ax = plt.subplots(1,1, figsize=(16,8))
         plot_df_as_parallel_coordinates(df, 
-                                        [model_type+"_knot_density_max",  model_type+"_knot_density_end", model_type+"_test_loss_end"], model_type+"_test_loss_end",
-                                        host = ax, title=model_type,
+                                        [model_type+"_knot_density_max",  model_type+"_knot_density_end", model_type+"_test_loss_end", model_type+"_test_accuracy_end"], 
+                                        model_type+"_test_accuracy_end",
+                                        host = ax, title=model_type, accuracy_scale_collumns = [model_type+"_test_accuracy_end"],
                                         same_y_scale_collumns = [[model_type+"_knot_density_max",  model_type+"_knot_density_end"]])    
         plt.tight_layout()
         plt.savefig(os.path.join(results_dir_with_parent, f"parallel_coordinates_{model_type}.png"), dpi=300, bbox_inches='tight')

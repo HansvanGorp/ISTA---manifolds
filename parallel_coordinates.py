@@ -129,9 +129,6 @@ def plot_df_as_parallel_coordinates(df, collumns_to_plot, color_collumn,
         color_values = np.zeros_like(color_values)
     else:
         color_values = (color_values - color_values.min()) / (color_values.max() - color_values.min())
-
-    # reverse the color values, so that the highest value is the lowest color
-    color_values = 1 - color_values
     
     # create the figure
     if host is None:

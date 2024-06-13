@@ -14,6 +14,29 @@ from data import data_generator, ISTAData
 from knot_density_analysis import generate_path
 
 # %% ISTA
+def get_support_accuracy(x_hat: torch.tensor, x: torch.tensor):
+    """
+    get the support accuracy of a batch of x_hat compared to x
+    """
+    # make x and x_hat on the same device
+    x = x.to(x_hat.device)
+
+    # make the x and x_hat the same shape
+    if len(x_hat.shape) != len(x.shape):
+        x = x.unsqueeze(2).expand_as(x_hat)
+
+    # get the support accuracy
+    support_of_x = (x != 0)
+    support_of_x_hat = (x_hat != 0)
+
+    equal_support = (support_of_x == support_of_x_hat)
+
+    all_N_equal = equal_support.all(dim=1)
+
+    support_accuracy = 100.0 * all_N_equal.float().mean()
+
+    return support_accuracy
+
 def grid_search_ista(model: ISTA, train_data: ISTAData, validation_data: ISTAData, model_config: dict, tqdm_position: int=0, verbose: bool=True, tqdm_leave: bool=True):
     """
     perfrom a grid search for the best mu and lambda for the ISTA module. using the data generator.
@@ -29,22 +52,31 @@ def grid_search_ista(model: ISTA, train_data: ISTAData, validation_data: ISTADat
     # step 2, create the grid
     mus      = torch.linspace(model_config["mu"]["min"], model_config["mu"]["max"], model_config["mu"]["nr_points"])
     _lambdas = torch.linspace(model_config["lambda"]["min"], model_config["lambda"]["max"], model_config["lambda"]["nr_points"])
-    losses = torch.zeros(len(mus), len(_lambdas))
+    # losses = torch.zeros(len(mus), len(_lambdas)) + 1e32
+    accuracies = torch.zeros(len(mus), len(_lambdas))
 
     # step 3, loop over the grid
     for i, mu in enumerate(tqdm(mus, position=tqdm_position, leave=tqdm_leave, disable=not verbose, desc="grid search for ISTA, runnning over mus")):
         for j, _lambda in enumerate(tqdm(_lambdas, position=tqdm_position+1, leave=(tqdm_leave and (i+1)==len(mus)), disable=not verbose, desc="grid search for ISTA, runnning over lambdas")):
+            # check if _lambda is equal to or larger than my, if so, skip this iteration
+            if _lambda >= mu:
+                continue
+            
             # change the mu and lambda of the model
             model.reset_params_using_mu_and_lambda(mu, _lambda)
             
             # run the ISTA module
             x_hat,_ = model(y, verbose = False, return_intermediate = True, calculate_jacobian = False)           
 
-            # calculate the l1 loss over the K folds
-            losses[i,j] = get_reconstruction_loss(x,x_hat)
+            # calculate the loss over the K folds
+            #losses[i,j] = get_reconstruction_loss(x,x_hat)
+
+            # calculate the support accuracy
+            accuracies[i,j] = get_support_accuracy(x_hat, x)
 
     # step 4, find the best mu and lambda
-    best_idx = torch.argmin(losses)
+    # best_idx = torch.argmin(losses)
+    best_idx = torch.argmax(accuracies)
     best_mu_idx = best_idx // len(_lambdas)
     best_lambda_idx = best_idx % len(_lambdas)
 
@@ -55,7 +87,7 @@ def grid_search_ista(model: ISTA, train_data: ISTAData, validation_data: ISTADat
     # also reset the model with the best mu and lambda
     model.reset_params_using_mu_and_lambda(best_mu, best_lambda)
 
-    return model, best_mu, best_lambda
+    return model, best_mu, best_lambda, accuracies, mus.numpy(), _lambdas.numpy()
 
 # %% LISTA
 def get_loss_on_dataset_over_folds(model: ISTA, datset: ISTAData):
@@ -67,11 +99,28 @@ def get_loss_on_dataset_over_folds(model: ISTA, datset: ISTAData):
 
     with torch.no_grad():
         x_hat,_ = model(y, verbose = False, return_intermediate = True, calculate_jacobian = False)
-        x = x.unsqueeze(2).expand_as(x_hat).to(x_hat.device)
 
-    loss_per_fold = ((torch.abs((x_hat - x)**2).mean(dim=(0,1)))**0.5).cpu()
+    loss_per_fold = torch.zeros(model.nr_folds)
+    for k in range(model.nr_folds):
+        loss_per_fold[k] = get_reconstruction_loss(x_hat[:,:,k], x, l1_weight=1.0, l2_weight=1.0)
 
     return loss_per_fold
+
+def get_support_accuracy_on_dataset_over_folds(model: ISTA, datset: ISTAData):
+    """
+    get the support accuracy of a model on an entire dataset over the folds
+    """
+
+    y, x = datset.y, datset.x
+
+    with torch.no_grad():
+        x_hat,_ = model(y, verbose = False, return_intermediate = True, calculate_jacobian = False)
+
+    support_accuracy_per_fold = torch.zeros(model.nr_folds)
+    for k in range(model.nr_folds):
+        support_accuracy_per_fold[k] = get_support_accuracy(x_hat[:,:,k], x)
+
+    return support_accuracy_per_fold
 
 
 def calculate_loss(x_hat: torch.tensor, x: torch.tensor, model: LISTA, model_config: dict, regularize: bool=False):
@@ -89,7 +138,7 @@ def calculate_loss(x_hat: torch.tensor, x: torch.tensor, model: LISTA, model_con
 
     return total_loss, reconstruction_loss, regularization_loss
 
-def get_reconstruction_loss(x: torch.tensor, x_hat: torch.tensor):
+def get_reconstruction_loss(x: torch.tensor, x_hat: torch.tensor, l1_weight: float=0.5, l2_weight: float=0.5):
     """
     get the loss of a batch of x_hat compared to x
     """
@@ -99,9 +148,15 @@ def get_reconstruction_loss(x: torch.tensor, x_hat: torch.tensor):
     # make the x and x_hat the same shape
     if len(x_hat.shape) != len(x.shape):
         x = x.unsqueeze(2).expand_as(x_hat)
+
+    # get the L1 loss
+    l1 = (torch.abs(x_hat - x)).mean()
+
+    # get the L2 loss
+    l2 = ((x_hat - x)**2).mean()
         
     # calculate loss
-    loss = ((x_hat - x)**2).mean()
+    loss = l1_weight * l1 + l2_weight * l2
 
     return loss
 

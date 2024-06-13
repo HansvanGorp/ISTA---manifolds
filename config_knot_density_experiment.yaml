@@ -3,11 +3,10 @@
 
 # general parameters
 device: "cuda:0" # device to run the experiment on
-results_dir: "test_K4_M8_N64_nr16384"
+results_dir: "test_L1_and_L2_loss"
 seed: 1 # seed for reproducibility
 max_nr_of_experiments: 1 # maximum number of experiments to run
 A_with_good_singular_values: False # bool to decide if we want to generate A with good singular values or just randomly
-
 
 # we want to run the experiment in different contexts of dimension sizes and sparsity levels of x
 # y dimension M, x dimension N, sparsity in x of K, each described by a range
@@ -25,18 +24,18 @@ data_that_varies:
 
 data_that_stays_constant:
   x_magnitude: [1, 2]
-  noise_std: 0.1
+  noise_std: 0.01
   nr_training_samples:   16384
   nr_validation_samples: 1024
   nr_test_samples:       1024
 
 # ISTA parameters
 ISTA:
-  nr_folds: 128
+  nr_folds: 1024
   mu:
     min: 0.01
-    max: 1
-    nr_points: 100
+    max: 2
+    nr_points: 200
   lambda:
     min: 0.01
     max: 1
@@ -67,7 +66,7 @@ RLISTA:
     nr_points_along_path: 1024 # 2^9  , 2^14
     path_delta: 0.01           # 0.01 , 0.001
     type: smooth_jacobian # smooth_jacobian, or tie_weights, or tv_jacobian
-    weight: 0.01          # 0.01           , or 2          , or 100
+    weight: 0.04          # 0.01           , or 2          , or 100
 
 # Path parameters
 Path:
@@ -78,7 +77,7 @@ Path:
 
 # hyperplane parameters
 Hyperplane:
-  enabled: False # bool to decide if we want to perform the hyperplane experiment
+  enabled: True # bool to decide if we want to perform the hyperplane experiment
   nr_points_along_axis: 1024 # number of points to sample along the axis
   indices_of_projection: [~,0,1] # The indices of the anchor points, aka, which k-sparse vector to project onto. 
                                  #A none means the origin, a 0 means x=[1,0,0,0,..] and a 1 means x=[0,1,0,0,..], and so on.
