@@ -278,8 +278,9 @@ def train_lista(model: LISTA, train_data: ISTAData, validation_data: ISTAData, m
             train_losses[fraction_idx,1] = reconstruction_loss.item()
             train_losses[fraction_idx,2] = regularization_loss.item()
 
-            # plot the loss
-            plot_loss(fraction_idx, epoch_idx, fractions, epochs, train_losses, val_losses, save_name, show_loss_plot, loss_folder, regularize)
+            # plot the loss, every so often
+            if i % 100 == 0:
+                plot_loss(fraction_idx, epoch_idx, fractions, epochs, train_losses, val_losses, save_name, show_loss_plot, loss_folder, regularize)
 
         # validation
         val_losses[epoch_idx+1,:] = go_over_validation_set(model, dataloader_val, model_config, regularize, tqdm_position = tqdm_position+1, verbose = verbose , tqdm_leave = leave_nested_bar)
