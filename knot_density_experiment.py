@@ -119,15 +119,15 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
             model = ista.ISTA(A, mu = 0, _lambda = 0, nr_folds = model_config["nr_folds"], device = config["device"])
 
             # perform grid search on ISTA for the best lambda and mu for these parameters
-            model, mu, _lambda, accuracies, tested_mus, tested_lambdas = grid_search_ista(model, train_data, validation_data, model_config, tqdm_position=1, verbose=True, tqdm_leave=tqdm_leave)
+            model, mu, _lambda, losses, tested_mus, tested_lambdas = grid_search_ista(model, train_data, validation_data, model_config, tqdm_position=1, verbose=True, tqdm_leave=tqdm_leave)
             
             # save the results of the grid search in the results directroy in a .yaml file
             with open(os.path.join(model_folder, "best_mu_and_lambda.yaml"), 'a') as file:
                 yaml.dump({"mu": mu.cpu().item(), "lambda": _lambda.cpu().item()}, file)   
 
-            # put the accuracies in a .csv file, with the tested mus and lambdas as the rows and columns
-            df = pd.DataFrame(accuracies, index=tested_mus, columns=tested_lambdas)
-            df.to_csv(os.path.join(model_folder, "accuracies.csv"))
+            # put the losses in a .csv file, with the tested mus and lambdas as the rows and columns
+            df = pd.DataFrame(losses, index=tested_mus, columns=tested_lambdas)
+            df.to_csv(os.path.join(model_folder, "losses.csv"))
 
 
         # otherwise, the model is LISTA or RLISTA, and needs to be trained
@@ -164,16 +164,19 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
         # visualize the results in a 2D plane
         hyperplane_config = config["Hyperplane"]
         if hyperplane_config["enabled"]:
-            #hyperplane_folder_norm           = os.path.join(model_folder, "hyperplane","norm")  
-            hyperplane_folder_jacobian_label = os.path.join(model_folder, "hyperplane","jacobian_label")      
+            hyperplane_folder_norm           = os.path.join(model_folder, "hyperplane","norm")  
+            hyperplane_folder_jacobian_label = os.path.join(model_folder, "hyperplane","jacobian_label")
+            hyperplane_folder_jacobian_pca = os.path.join(model_folder, "hyperplane","jacobian_pca")
 
-            #visual_analysis_of_ista(model, model_config, hyperplane_config, A, save_folder = hyperplane_folder_norm,           tqdm_position=1, tqdm_leave= tqdm_leave, verbose = True, color_by="norm")
+            visual_analysis_of_ista(model, model_config, hyperplane_config, A, save_folder = hyperplane_folder_norm,           tqdm_position=1, tqdm_leave= tqdm_leave, verbose = True, color_by="norm")
             visual_analysis_of_ista(model, model_config, hyperplane_config, A, save_folder = hyperplane_folder_jacobian_label, tqdm_position=1, tqdm_leave= tqdm_leave, verbose = True, color_by="jacobian_label")
+            visual_analysis_of_ista(model, model_config, hyperplane_config, A, save_folder = hyperplane_folder_jacobian_pca   , tqdm_position=1, tqdm_leave= tqdm_leave, verbose = True, color_by="jacobian_pca")
 
             # make gifs of the results?
             if hyperplane_config["make_gif"]:
-                #make_gif_from_figures_in_folder(hyperplane_folder_norm,   10)
+                make_gif_from_figures_in_folder(hyperplane_folder_norm,   10)
                 make_gif_from_figures_in_folder(hyperplane_folder_jacobian_label, 10)
+                make_gif_from_figures_in_folder(hyperplane_folder_jacobian_pca,   10)
 
     # %% after looping over each model type, make combined plots of all model types together
     # create a directory for the combined results

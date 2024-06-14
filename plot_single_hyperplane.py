@@ -51,12 +51,12 @@ if model_type == "ISTA":
     model_config = results_config[model_type]
 
     # if this is ista, we can load grid search results
-    grid_search_results_file = os.path.join(model_dir, "grid_search_results.yaml")
-    with open(grid_search_results_file, 'r') as file:
-        grid_search_results = yaml.load(file, Loader=yaml.FullLoader)
+    best_mu_and_lambda_file = os.path.join(model_dir, "best_mu_and_lambda.yaml")
+    with open(best_mu_and_lambda_file, 'r') as file:
+        best_mu_and_lambda = yaml.load(file, Loader=yaml.FullLoader)
 
-    mu      = grid_search_results["mu"]
-    _lambda = grid_search_results["lambda"]
+    mu      = best_mu_and_lambda["mu"]
+    _lambda = best_mu_and_lambda["lambda"]
 
     # create the ISTA model with the loaded parameters
     model = ista.ISTA(A, mu = mu, _lambda = _lambda, nr_folds = model_config["nr_folds"], device = results_config["device"])
@@ -81,6 +81,7 @@ nr_points_in_batch      = hyperplane_config.get("nr_points_in_batch", 1024)
 nr_points_along_axis    = hyperplane_config.get("nr_points_along_axis", 1024)
 margin                  = hyperplane_config.get("margin", 0.5)
 indices_of_projection   = hyperplane_config.get("indices_of_projection", [None,0,1])
+anchor_on_y_instead     = hyperplane_config.get("anchor_on_y_instead", False)
 magntiude               = hyperplane_config.get("magnitude", 1.0)
 tolerance               = hyperplane_config.get("tolerance", None)
 draw_decision_boundary  = hyperplane_config.get("draw_decision_boundary", False)
@@ -93,7 +94,7 @@ color_by = plot_config["color_by"]
 max_magnitude = magntiude
 
 # anchor point 0 is where the x-vector is [0,0,0,...,0]
-y_anchors, _ = ha.create_anchors_from_x_indices(indices_of_projection, A)
+y_anchors, _ = ha.create_anchors_from_x_indices(indices_of_projection, A, anchor_on_y_instead= anchor_on_y_instead)
 
 # create the projection matrix
 jacobian_projection = ha.create_jacobian_projection_from_anchors(y_anchors)
@@ -139,7 +140,7 @@ ymax = max_magnitude + margin
 
 # if we are using jacboian labels, we need to create a map to colors object
 if color_by == "jacobian_label":
-    map_to_colors = ha.MapToColors(20)
+    map_to_colors = ha.MapToColors(8)
 
 # extract the linear regions from the jacobian
 nr_of_regions, norms, _, jacobian_labels = ha.extract_linear_regions_from_jacobian(jacobian, tolerance = tolerance)    
@@ -171,8 +172,20 @@ nr_pixels_along_axis = nr_points_along_axis
 fig_size_along_axis = nr_pixels_along_axis / dpi
 
 fig = plt.figure(figsize=(fig_size_along_axis, fig_size_along_axis))
-ax = fig.add_axes([0, 0, 1, 1])
-ax.axis('off')
+
+
+if plot_config["axis_off"]:
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.axis('off')
+elif anchor_on_y_instead:
+    ax = fig.add_axes([0.1, 0.1, 0.9, 0.9])
+    ax.set_xlabel("y1")
+    ax.set_ylabel("y2")
+else:
+    ax = fig.add_axes([0.1, 0.1, 0.9, 0.9])
+    ax.set_xlabel("x1")
+    ax.set_ylabel("x2")
+
 ax.imshow(color_data, cmap=cmap, origin="lower", extent=[xmin, xmax, ymin, ymax])
 
 if plot_data_regions:
@@ -185,6 +198,40 @@ if draw_decision_boundary:
 # set limits
 ax.set_xlim([xmin, xmax])
 ax.set_ylim([ymin, ymax])
+
+
+if plot_config["draw_path"]:
+    # draw a random path with knots
+    point_0 = np.array([-1.7,-2])
+    point_1 = np.array([0,2])
+    point_2 = np.array([2,0])
+    point_3 = np.array([0,0])
+    point_4 = np.array([1,-1.5])
+    path = np.array([point_0, point_1, point_2, point_3, point_4])
+
+    # draw the path
+    ax.plot(path[:,0], path[:,1], color = "white", zorder = 2, linewidth = 2)
+
+    # figure out where the path crosses from one jacobian to another, for this we leverage jacobian_labels_reshaped
+    for i in range(1, path.shape[0]):
+        # find the start and end point
+        point_start = path[i-1]
+        point_end = path[i]
+
+        # create a linspace of many points between the start and end point
+        linspace = np.linspace(point_start, point_end, 1000)
+
+        # now loop over the linspace and find the jacobian label at each point
+        for point_0, point_1 in zip(linspace[:-1], linspace[1:]):
+            # get the jacobian label at the start and end point
+            jacobian_label_start = jacobian_labels_reshaped[int((point_0[1] - ymin) / (ymax - ymin) * nr_points_along_axis), int((point_0[0] - xmin) / (xmax - xmin) * nr_points_along_axis)]
+            jacobian_label_end   = jacobian_labels_reshaped[int((point_1[1] - ymin) / (ymax - ymin) * nr_points_along_axis), int((point_1[0] - xmin) / (xmax - xmin) * nr_points_along_axis)]
+
+            # if they are different, we need to draw a knot
+            if jacobian_label_start != jacobian_label_end:
+                ax.plot(point_0[0], point_0[1], 'o', color = "white", markersize = 8, zorder = 2)
+    
+
 
 # create a figure subfolder
 figure_dir = "hyperplane_analysis_figures"

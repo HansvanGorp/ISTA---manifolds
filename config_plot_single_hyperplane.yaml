@@ -1,30 +1,37 @@
 ---
 # this yaml file contains the settings used to plot a single hyperplane figure for the paper
 
-figure_name: "RLISTA_16"
-iteration: 16
+figure_name: "placeholder_2_3"
+iteration: 1
 
 # which experiment to load the results from
-results_dir: "test_3" 
+results_dir: "test_L1_and_L2_loss_M2_N3" 
 experiment_id: "0"
-model: "RLISTA"
+model: "ISTA"
 
 # what to plot
 color_by: "jacobian_label" # the color to use for the plot, can be "jacobian_label" or "norm"
+draw_path: True # bool to decide if we want to draw a random path with knots
+axis_off: False # bool to decide if we want to turn off the axis
 
 # hyperplane parameters
 Hyperplane:
-  nr_points_in_batch: 1024 # number of points to sample in the batch
+  enabled: True # bool to decide if we want to perform the hyperplane experiment
+  nr_points_in_batch: 1024 # number of points to sample in a batch
   nr_points_along_axis: 1024 # number of points to sample along the axis
   indices_of_projection: [~,0,1] # The indices of the anchor points, aka, which k-sparse vector to project onto. 
                                  #A none means the origin, a 0 means x=[1,0,0,0,..] and a 1 means x=[0,1,0,0,..], and so on.
                                  # for now, this only support with None always as the first element
-  magnitude: 1.5     # the magnitude to choose for the first anchor points, ie, x = x * magnitude
+  anchor_on_y_instead: True # bool to decide if we want to plot the raw y instead of the plane indices -> note that plot_data_regions should be False if this is True
+  magnitude: 3       # the magnitude to choose for the first anchor points, ie, x = x * magnitude
   margin: 0.5        # the additional margin to extend the hyperplane by
-  symmetric: False   # bool to decide if we want to make the hyperplane symmetric
-  draw_decision_boundary: False # bool to decide if we want to draw the decision boundary
-  plot_data_regions:  True # bool tpo decide if we want to plot the data regions
-  data_region_extend: [0.5, 1.5] # the extend of the data region, ie, the range of the data
-  K: 2               # the sparsity level of the data to consider for plotting
+  symmetric: True   # bool to decide if we want to make the hyperplane symmetric
   
-  tolerance: ~    # the minimum difference in values of the jacobian to consider. If ~, uses machine precision
+  tolerance: ~       # the minimum difference in values of the jacobian to consider. If ~, uses machine precision
+
+  draw_decision_boundary: True # bool to decide if we want to draw the decision boundary
+
+  plot_data_regions: False    # bool tpo decide if we want to plot the data regions
+  only_positive: True         # bool to decide if we only want to plot the positve part of the data
+  data_region_extend: [1, 2]  # the extend of the data region, ie, the range of the data
+  K: 2                        # the sparsity level of the data to consider for plotting

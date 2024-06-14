@@ -52,8 +52,8 @@ def grid_search_ista(model: ISTA, train_data: ISTAData, validation_data: ISTADat
     # step 2, create the grid
     mus      = torch.linspace(model_config["mu"]["min"], model_config["mu"]["max"], model_config["mu"]["nr_points"])
     _lambdas = torch.linspace(model_config["lambda"]["min"], model_config["lambda"]["max"], model_config["lambda"]["nr_points"])
-    # losses = torch.zeros(len(mus), len(_lambdas)) + 1e32
-    accuracies = torch.zeros(len(mus), len(_lambdas))
+    losses = torch.zeros(len(mus), len(_lambdas)) + 1e32
+    #accuracies = torch.zeros(len(mus), len(_lambdas))
 
     # step 3, loop over the grid
     for i, mu in enumerate(tqdm(mus, position=tqdm_position, leave=tqdm_leave, disable=not verbose, desc="grid search for ISTA, runnning over mus")):
@@ -65,14 +65,14 @@ def grid_search_ista(model: ISTA, train_data: ISTAData, validation_data: ISTADat
             x_hat,_ = model(y, verbose = False, return_intermediate = True, calculate_jacobian = False)           
 
             # calculate the loss over the K folds
-            #losses[i,j] = get_reconstruction_loss(x,x_hat)
+            losses[i,j] = get_reconstruction_loss(x,x_hat)
 
             # calculate the support accuracy
-            accuracies[i,j] = get_support_accuracy(x_hat, x)
+            #accuracies[i,j] = get_support_accuracy(x_hat, x)
 
     # step 4, find the best mu and lambda
-    # best_idx = torch.argmin(losses)
-    best_idx = torch.argmax(accuracies)
+    best_idx = torch.argmin(losses)
+    #best_idx = torch.argmax(accuracies)
     best_mu_idx = best_idx // len(_lambdas)
     best_lambda_idx = best_idx % len(_lambdas)
 
@@ -83,7 +83,7 @@ def grid_search_ista(model: ISTA, train_data: ISTAData, validation_data: ISTADat
     # also reset the model with the best mu and lambda
     model.reset_params_using_mu_and_lambda(best_mu, best_lambda)
 
-    return model, best_mu, best_lambda, accuracies, mus.numpy(), _lambdas.numpy()
+    return model, best_mu, best_lambda, losses, mus.numpy(), _lambdas.numpy()
 
 # %% LISTA
 def get_loss_on_dataset_over_folds(model: ISTA, datset: ISTAData):
@@ -134,7 +134,7 @@ def calculate_loss(x_hat: torch.tensor, x: torch.tensor, model: LISTA, model_con
 
     return total_loss, reconstruction_loss, regularization_loss
 
-def get_reconstruction_loss(x: torch.tensor, x_hat: torch.tensor, l1_weight: float=0.5, l2_weight: float=0.5):
+def get_reconstruction_loss(x: torch.tensor, x_hat: torch.tensor, l1_weight: float=0.0, l2_weight: float=1.0):
     """
     get the loss of a batch of x_hat compared to x
     """

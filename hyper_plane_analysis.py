@@ -128,6 +128,33 @@ def extract_linear_regions_from_jacobian(jacobian: torch.tensor, tolerance: floa
         
         return nr_of_regions, norms, unique_entries, jacobian_labels
 
+def perform_pca_on_jacobian(jacobian: torch.tensor):
+    """ 
+    Perform PCA on the jacobian, and return only the first three principal components per input example.
+
+    inputs:
+    - jacobian (torch.tensor): the Jacobian of the forward function, of shape (batch_size, N, M) or (batch_size, N, 2) if jacobian_projection was used, we will call the last dimension Z
+
+    outputs:
+    - rgb_values (torch.tensor): the rgb values of the jacobian, of shape (batch_size, 3)
+    """
+    # step 1, reshape the jacobian to (batch_size, N*Z)
+    batch_size, N, Z  = jacobian.shape # let's just call the last dimension Z for now
+    jacobian = jacobian.view(batch_size, N*Z)
+
+    # step 2, perform PCA on the jacobian
+    pca = torch.linalg.svd(jacobian, full_matrices=False)
+    principal_components = pca.Vh[:,:3]
+
+    # step 3, project the jacobian to the first three principal components
+    rgb_values = jacobian @ principal_components
+
+    # step 4, normalize the rgb values, so that each channel is between 0 and 1
+    rgb_values = rgb_values - rgb_values.min(dim=1).values.unsqueeze(1).repeat(1,3)
+    rgb_values = rgb_values / rgb_values.max(dim=1).values.unsqueeze(1).repeat(1,3)
+
+    return rgb_values
+
 def create_y_from_projection(anchors: torch.tensor, nr_points_along_axis: int, margin: float = 0.5, max_magnitude: float = 1.0, symmetric: bool = False):
     """
     Given three anchor points, create a meshgrid of y values that forms the plane of the three anchor points.
@@ -267,7 +294,7 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
         - indices_of_projection:    defaults to [~,0,1] the indices of the anchor points, A none means the origin, a 0 means x=[1,0,0,0,..] and a 1 means x=[0,1,0,0,..], and so on.
         - magntiude:                defaults to 1       the magnitude of the anchor points, default is 1.0
         - tolerance:                defaults to None    the minimum difference in jacboian to consider at all. if tolerance is e.g. 0.01 differnces smaller than that are trunctated 
-        - color_by:                 defaults to "norm"  what to color the regions by, either "norm" or "jacobian_label"
+        - color_by:                 defaults to "norm"  what to color the regions by, either "norm" or "jacobian_label" or "jacobian_pca"
         - draw_decision_boundary:   defaults to False   if True, draw the decision boundary of the sparsity of the x-vector
         - plot_data_regions:        defaults to False   if True, plot the data regions in the 2D space
 
@@ -367,6 +394,11 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
             jacobian_labels_reshaped = jacobian_labels.reshape(nr_points_along_axis, nr_points_along_axis)
             color_data = map_to_colors(jacobian_labels_reshaped).cpu()
             cmap = 'tab20'
+        elif color_by == "jacobian_pca":
+            color_data = perform_pca_on_jacobian(jacobian)
+            color_data = color_data.cpu()
+            color_data = color_data.reshape(nr_points_along_axis, nr_points_along_axis, 3)
+            cmap = None
         else:
             raise ValueError("color_by should be either 'norm' or 'jacobian_label'")
 
@@ -383,7 +415,10 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
         fig = plt.figure(figsize=(fig_size_along_axis, fig_size_along_axis))
         ax = fig.add_axes([0, 0, 1, 1])
         ax.axis('off')
-        ax.imshow(color_data, extent=[xmin, xmax, ymin, ymax], cmap = cmap, vmin = 0, vmax = color_data.max(), origin="lower", zorder = -10)
+        if cmap is None:
+            ax.imshow(color_data, extent=[xmin, xmax, ymin, ymax], origin="lower", zorder = -10)
+        else:
+            ax.imshow(color_data, extent=[xmin, xmax, ymin, ymax], cmap = cmap, vmin = 0, vmax = color_data.max(), origin="lower", zorder = -10)
         
         if plot_data_regions:
             data_on_plane.plot_data_regions(show_legend=False, colors = ["white","white","white"], ax = ax)
