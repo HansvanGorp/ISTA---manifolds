@@ -295,6 +295,12 @@ def train_lista(model: LISTA, train_data: ISTAData, validation_data: ISTAData, m
         # check if patience is reached, if so, stop
         if patience_counter == model_config["patience"]:
             break
+
+        # after each epoch, save the model of the current epoch
+        state_dict = model.state_dict()
+        torch.save(state_dict,   os.path.join(loss_folder, f"{save_name}_state_dict_epoch_{epoch_idx}.tar"))
+        torch.save(train_losses, os.path.join(loss_folder, "train_loss_epoch_{epoch_idx}.tar"))
+        torch.save(val_losses,   os.path.join(loss_folder, "val_loss_epoch_{epoch_idx}.tar"))
             
     # save some stuff
     state_dict = model.state_dict()

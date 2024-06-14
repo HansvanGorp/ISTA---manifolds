@@ -13,14 +13,14 @@ A_with_good_singular_values: False # bool to decide if we want to generate A wit
 # we also have some noise in the data according to y=Ax+noise with the noise~N(0, noise_std**2)
 data_that_varies:
   K:
-    min: 1 #4
-    max: 1 #4
+    min: 4
+    max: 4
   M:
-    min: 2 #8
-    max: 2 #8
+    min: 8 #8
+    max: 8 #8
   N:
-    min: 3 #64
-    max: 3 #64
+    min: 64
+    max: 64
 
 data_that_stays_constant:
   x_magnitude: [1, 2]
@@ -77,7 +77,7 @@ Path:
 
 # hyperplane parameters
 Hyperplane:
-  enabled: True # bool to decide if we want to perform the hyperplane experiment
+  enabled: False # bool to decide if we want to perform the hyperplane experiment
   nr_points_along_axis: 1024 # number of points to sample along the axis
   indices_of_projection: [~,0,1] # The indices of the anchor points, aka, which k-sparse vector to project onto. 
                                  #A none means the origin, a 0 means x=[1,0,0,0,..] and a 1 means x=[0,1,0,0,..], and so on.
