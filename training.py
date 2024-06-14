@@ -57,11 +57,7 @@ def grid_search_ista(model: ISTA, train_data: ISTAData, validation_data: ISTADat
 
     # step 3, loop over the grid
     for i, mu in enumerate(tqdm(mus, position=tqdm_position, leave=tqdm_leave, disable=not verbose, desc="grid search for ISTA, runnning over mus")):
-        for j, _lambda in enumerate(tqdm(_lambdas, position=tqdm_position+1, leave=(tqdm_leave and (i+1)==len(mus)), disable=not verbose, desc="grid search for ISTA, runnning over lambdas")):
-            # check if _lambda is equal to or larger than my, if so, skip this iteration
-            if _lambda >= mu:
-                continue
-            
+        for j, _lambda in enumerate(tqdm(_lambdas, position=tqdm_position+1, leave=(tqdm_leave and (i+1)==len(mus)), disable=not verbose, desc="grid search for ISTA, runnning over lambdas")):           
             # change the mu and lambda of the model
             model.reset_params_using_mu_and_lambda(mu, _lambda)
             
