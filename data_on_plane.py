@@ -41,11 +41,12 @@ class DataOnPlane:
         # find the defining equation of the plane in y-space
         ns = null_space(y_anchors)
         if ns.shape[1] == 0:
-            # could not fin a null space, this means that the y_anchors are not linearly independent
-            raise ValueError("The y_anchors are not linearly independent")
-        
-        self.normal = torch.tensor(ns[:,0])
-        self.bias = torch.tensor(np.dot(self.normal, y_anchors[0,:]))
+            self.normal = None
+            self.bias = None
+        else:
+            self.normal = torch.tensor(ns[:,0])
+            self.bias = torch.tensor(np.dot(self.normal, y_anchors[0,:]))
+
         self.direction_1 = y_anchors[1,:] - y_anchors[0,:]
         self.direction_2 = y_anchors[2,:] - y_anchors[0,:]
         
@@ -71,15 +72,21 @@ class DataOnPlane:
     
     # function that checks if a point is on the hyperplane
     def check_if_on_hyperplane(self, y: torch.tensor):
-        outcome = torch.dot(self.normal, y) - self.bias
-        if outcome > 1e-6:
-            side = 1
-        elif outcome < -1e-6:
-            side = -1
-        else:
-            side = 0
+        # is self.normal is None, there is no null space, so we are always on the hyperplane
+        if self.normal is None:
+            return 0
 
-        return side
+        else:
+            # else we need to check the normal equation
+            outcome = torch.dot(self.normal, y) - self.bias
+            if outcome > 1e-6:
+                side = 1
+            elif outcome < -1e-6:
+                side = -1
+            else:
+                side = 0
+
+            return side
     
     # create a function that returns the hyperplane coordinates of a y-vector
     def y_to_hyperplane_coordinates(self, y: torch.tensor):

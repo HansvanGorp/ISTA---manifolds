@@ -31,7 +31,12 @@ def create_random_matrix(M: int, N: int):
     """
 
     # create a random matrix A
-    A = torch.randn(M, N) * 0.1
+    A = torch.randn(M, N)
+
+    # each row of A, the expected std is N, since we are adding N gaussians
+    # we want to normalize the rows of A, such that the expected std is 1
+    # this is done by dividing by the square root of N, so that the expected std is 1
+    A = A / N**0.5
 
     return A
 

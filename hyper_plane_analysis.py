@@ -293,6 +293,7 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
     data_region_extend      = hyperplane_config.get("data_region_extend", [0.5, 1.5])
     K                       = hyperplane_config.get("K", 4)
     symmetric               = hyperplane_config.get("symmetric", False)
+    only_positive           = hyperplane_config.get("only_positive", True)
 
     # create the save folder if it does not exist
     if not os.path.exists(save_folder):
@@ -338,7 +339,7 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
 
     # if we want to plot the data regions, we need to create a function that does this  
     if plot_data_regions:
-        data_on_plane = DataOnPlane(A, data_region_extend, y_anchors, K=K, consider_partials=False, only_positive=True)
+        data_on_plane = DataOnPlane(A, data_region_extend, y_anchors, K=K, consider_partials=False, only_positive=only_positive)
 
     # loop over the iterations
     for fold_idx in tqdm(range(nr_folds), position=tqdm_position, leave=tqdm_leave, disable=not verbose, desc="visual analysis of ISTA, runnning over folds"):
