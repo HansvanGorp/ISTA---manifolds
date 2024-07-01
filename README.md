@@ -26,7 +26,7 @@ python plot_single_hyperplane.py
 ```
 Which will do just that. The configuration file "config_plot_single_hyperplane.yaml" contains the settings for this which can be altered by the user.
 
-## short explenation of each file
+## short explanation of each file
 I here list each file with a very brief decription of what they contain:
 - "data_on_plane.py": This script defines a class to find all occurences of data on a hyperplane embedded in a higher dimensional space.
 - "data.py": This file creates the functions that create the data and the dataloaders for the experiments
