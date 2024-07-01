@@ -1,3 +1,7 @@
+"""
+This script creates a gif from all png images in a folder. frames are ordered by alphabetical name of the figure files.
+"""
+
 import imageio
 import os
 from natsort import natsorted

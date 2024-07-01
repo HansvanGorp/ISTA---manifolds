@@ -1,5 +1,5 @@
 """
-This file specifies different functions to train (RL)ISTA modules
+This file specifies different functions to train (R)(L)ISTA modules
 """
 
 import torch

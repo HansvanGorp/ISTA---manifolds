@@ -1,5 +1,5 @@
 """
-This the effects of the sampling parameters on the performance of the model.
+make a parralel coordinate plot from a dataframe
 """
 
 # %% imports

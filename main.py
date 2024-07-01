@@ -1,6 +1,5 @@
 """
-This file creates a large experiment to test the knot density of ISTA and LISTA in different conditions.
-For this, we use the functions layed out in ista.py
+This file creates a large experiment to test the knot density of (R)(L)ISTA in different conditions.
 """
 
 # %% imports

@@ -1,5 +1,5 @@
 """
-We here implement ISTA as a pytorch module
+We here implement (R)(L)ISTA as a pytorch module
 """
 
 import torch
