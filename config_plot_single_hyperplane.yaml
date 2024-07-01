@@ -5,7 +5,7 @@ figure_name: "placeholder_2_3"
 iteration: 1
 
 # which experiment to load the results from
-results_dir: "test_L1_and_L2_loss_M2_N3" 
+results_dir: "test_L2_loss_M2_N3" 
 experiment_id: "0"
 model: "ISTA"
 
