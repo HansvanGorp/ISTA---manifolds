@@ -25,9 +25,9 @@ data_that_varies:
 data_that_stays_constant:
   x_magnitude: [1, 2]
   noise_std: 0.01
-  nr_training_samples:   8192
-  nr_validation_samples: 1024
-  nr_test_samples:       1024
+  nr_training_samples:   10 # 8192
+  nr_validation_samples: 5 # 1024
+  nr_test_samples:       5 # 1024
 
 # ISTA parameters
 ISTA:

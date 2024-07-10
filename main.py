@@ -14,6 +14,7 @@ import yaml
 import shutil
 import time
 import pandas as pd
+import argparse
 
 # local imports
 import ista
@@ -25,14 +26,25 @@ from data import create_train_validation_test_datasets
 from training import grid_search_ista, train_lista, get_loss_on_dataset_over_folds, get_support_accuracy_on_dataset_over_folds
 from make_gif_from_figures_in_folder import make_gif_from_figures_in_folder
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Main experiment arguments")
+    parser.add_argument(
+        "-c",
+        "--config",
+        type=str,
+        default="configs/config_knot_density_experiment.yaml",
+        help="Path to the experiment config file.",
+    )
+    return parser.parse_args()
+args = parse_args()
+
 # %% constants
 model_types = ["ISTA", "LISTA", "RLISTA"] # the model types we are comparing
 nr_of_model_types = len(model_types) # the number of models we are comparing, ISTA, LISTA and RLISTA
 colors = ["tab:blue", "tab:orange", "tab:green"] # the colors for the models
 
 # %% load the configuration file
-config_file = "config_knot_density_experiment.yaml"
-with open(config_file, 'r') as file:
+with open(args.config, 'r') as file:
     config = yaml.load(file, Loader=yaml.FullLoader)
 
 # %% preambule

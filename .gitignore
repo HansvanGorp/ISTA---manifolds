@@ -2,3 +2,4 @@ __pycache__/
 knot_denisty_results/
 hyperplane_analysis_figures/
 .vscode/
+docker_run.sh
