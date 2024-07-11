@@ -15,6 +15,7 @@ import shutil
 import time
 import pandas as pd
 import argparse
+import uuid
 
 # local imports
 import ista
@@ -35,17 +36,31 @@ def parse_args():
         default="configs/config_knot_density_experiment.yaml",
         help="Path to the experiment config file.",
     )
+    parser.add_argument(
+        "-m",
+        "--model_types",
+        nargs='+',
+        default=["ISTA", "LISTA", "RLISTA"],
+        help="Specify which set of algorithms to run.",
+    )
     return parser.parse_args()
 args = parse_args()
-
-# %% constants
-model_types = ["ISTA", "LISTA", "RLISTA"] # the model types we are comparing
-nr_of_model_types = len(model_types) # the number of models we are comparing, ISTA, LISTA and RLISTA
-colors = ["tab:blue", "tab:orange", "tab:green"] # the colors for the models
 
 # %% load the configuration file
 with open(args.config, 'r') as file:
     config = yaml.load(file, Loader=yaml.FullLoader)
+    
+# %% constants
+# model_types = ["ISTA", "LISTA", "RLISTA"] # the model types we are comparing
+model_types = args.model_types # the model types we are comparing
+nr_of_model_types = len(model_types) # the number of models we are comparing, ISTA, LISTA and RLISTA
+colors = {
+    "ISTA": "tab:blue", 
+    "LISTA": "tab:orange", 
+    "RLISTA": "tab:green"
+}
+# the colors for the models
+
 
 # %% preambule
 # set the seed
@@ -53,7 +68,7 @@ torch.manual_seed(config["seed"])
 np.random.seed(config["seed"])
 
 # create the directory to save the results, check first if it already exists, if so stop, and query the user if it should be overwritten
-results_dir_with_parent = os.path.join("knot_denisty_results", config["results_dir"])
+results_dir_with_parent = os.path.join("knot_denisty_results", config["results_dir"], str(uuid.uuid4()))
 if os.path.exists(results_dir_with_parent):
     print(f"\nThis results directory already exists: {config['results_dir']}")
     print("Do you want to overwrite it? (y/n)")	
@@ -120,10 +135,11 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
         # get the model config for this model type
         model_config = config[model_type]
 
+            
         # create a directory for this model type
         model_folder = os.path.join(results_dir_this_experiment, model_type)
         os.makedirs(model_folder, exist_ok=True)
-
+            
         # check if this is ISTA, in which case the parameters are found by grid search
         if model_type == "ISTA":
             # create the ISTA model with mu=0 and lambda=0
@@ -145,7 +161,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
         else:
             # create the model using the parameters in the config file
             model = ista.LISTA(A, mu = model_config["initial_mu"], _lambda = model_config["initial_lambda"], nr_folds = model_config["nr_folds"], 
-                               device = config["device"], initialize_randomly = False)
+                            device = config["device"], initialize_randomly = False)
             
             regularize = (model_type == "RLISTA")
             model, train_losses, val_losses  =  train_lista(model, train_data, validation_data, model_config,show_loss_plot = False,
@@ -155,8 +171,8 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
                 
         # perform knot density analysis on the model
         knot_density = knot_density_analysis(model, model_config["nr_folds"], A, nr_paths = config["Path"]["nr_paths"], anchor_point_std = config["Path"]["anchor_point_std"],
-                                             nr_points_along_path=config["Path"]["nr_points_along_path"], path_delta=config["Path"]["path_delta"], save_folder = model_folder,
-                                             save_name = "knot_density_"+ model_type, verbose = True, color = colors[model_idx], tqdm_position=1, tqdm_leave=tqdm_leave)
+                                            nr_points_along_path=config["Path"]["nr_points_along_path"], path_delta=config["Path"]["path_delta"], save_folder = model_folder,
+                                            save_name = "knot_density_"+ model_type, verbose = True, color = colors[model_type], tqdm_position=1, tqdm_leave=tqdm_leave)
         
         # save the knot densities in a .tar file and to the lists
         torch.save(knot_density, os.path.join(model_folder, "knot_density.tar"))
@@ -201,7 +217,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     for model_idx, model_type in enumerate(model_types):
         knot_density = knot_density_over_experiments[model_idx][-1]
         folds = np.arange(0, len(knot_density))
-        plt.plot(folds, knot_density, label = model_type, c = colors[model_idx])
+        plt.plot(folds, knot_density, label = model_type, c = colors[model_type])
         max_folds = max(max_folds, len(knot_density))
 
     plt.grid()
@@ -221,7 +237,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     for model_idx, model_type in enumerate(model_types):
         test_loss = test_loss_over_experiments[model_idx][-1]
         folds = np.arange(0, len(test_loss))
-        plt.plot(folds, test_loss, label = model_type, c = colors[model_idx])
+        plt.plot(folds, test_loss, label = model_type, c = colors[model_type])
         max_folds = max(max_folds, len(test_loss))
 
     plt.grid()
@@ -241,7 +257,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     for model_idx, model_type in enumerate(model_types):
         test_accuracy = test_accuracy_over_experiments[model_idx][-1]
         folds = np.arange(0, len(test_accuracy))
-        plt.plot(folds, test_accuracy, label = model_type, c = colors[model_idx])
+        plt.plot(folds, test_accuracy, label = model_type, c = colors[model_type])
         max_folds = max(max_folds, len(test_accuracy))
 
     plt.grid()
@@ -266,8 +282,8 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
         knot_density_mean = knot_density_over_experiments_this_model.mean(dim=0)
         knot_density_std  = knot_density_over_experiments_this_model.std(dim=0)
         folds = np.arange(0, len(knot_density_mean))
-        plt.plot(folds, knot_density_mean, label = model_type, c = colors[model_idx])
-        plt.fill_between(folds, knot_density_mean - knot_density_std, knot_density_mean + knot_density_std, alpha=0.3, color=colors[model_idx])
+        plt.plot(folds, knot_density_mean, label = model_type, c = colors[model_type])
+        plt.fill_between(folds, knot_density_mean - knot_density_std, knot_density_mean + knot_density_std, alpha=0.3, color=colors[model_type])
         max_folds = max(max_folds, len(knot_density_mean))
 
     plt.grid()
@@ -291,8 +307,8 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
         test_loss_mean = test_loss_over_experiments_this_model.mean(dim=0)
         test_loss_std  = test_loss_over_experiments_this_model.std(dim=0)
         folds = np.arange(0, len(test_loss_mean))
-        plt.plot(folds, test_loss_mean, label = model_type, c = colors[model_idx])
-        plt.fill_between(folds, test_loss_mean - test_loss_std, test_loss_mean + test_loss_std, alpha=0.3, color=colors[model_idx])
+        plt.plot(folds, test_loss_mean, label = model_type, c = colors[model_type])
+        plt.fill_between(folds, test_loss_mean - test_loss_std, test_loss_mean + test_loss_std, alpha=0.3, color=colors[model_type])
         max_folds = max(max_folds, len(test_loss_mean))
 
     plt.grid()
@@ -316,8 +332,8 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
         test_accuracy_mean = test_accuracy_over_experiments_this_model.mean(dim=0)
         test_accuracy_std  = test_accuracy_over_experiments_this_model.std(dim=0)
         folds = np.arange(0, len(test_accuracy_mean))
-        plt.plot(folds, test_accuracy_mean, label = model_type, c = colors[model_idx])
-        plt.fill_between(folds, test_accuracy_mean - test_accuracy_std, test_accuracy_mean + test_accuracy_std, alpha=0.3, color=colors[model_idx])
+        plt.plot(folds, test_accuracy_mean, label = model_type, c = colors[model_type])
+        plt.fill_between(folds, test_accuracy_mean - test_accuracy_std, test_accuracy_mean + test_accuracy_std, alpha=0.3, color=colors[model_type])
         max_folds = max(max_folds, len(test_accuracy_mean))
 
     plt.grid()
@@ -338,27 +354,31 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     for model_idx, model_type in enumerate(model_types):
         knot_density_last_experiment_this_model = knot_density_over_experiments[model_idx][-1]
 
-        new_row[model_type+"_knot_density_max"] = knot_density_last_experiment_this_model.max().item()
-        new_row[model_type+"_knot_density_end"] = knot_density_last_experiment_this_model[-1].item()
+        new_row["model_type"] = model_type
+        new_row["regularization_type"] = model_config['regularization']['type'] if model_type == "RLISTA" else None
+        new_row["knot_density_max"] = knot_density_last_experiment_this_model.max().item()
+        new_row["knot_density_end"] = knot_density_last_experiment_this_model[-1].item()
 
         test_loss_last_experiment_this_model = test_loss_over_experiments[model_idx][-1]
-        new_row[model_type+"_test_loss_end"] = test_loss_last_experiment_this_model[-1].item()
+        new_row["test_loss_end"] = test_loss_last_experiment_this_model[-1].item()
 
         test_accuracy_last_experiment_this_model = test_accuracy_over_experiments[model_idx][-1]
-        new_row[model_type+"_test_accuracy_end"] = test_accuracy_last_experiment_this_model[-1].item()
+        new_row["test_accuracy_end"] = test_accuracy_last_experiment_this_model[-1].item()
 
 
     df = pd.concat([df, new_row], ignore_index=True)
-    df.to_csv(os.path.join(results_dir_with_parent, "parameters.csv"))
+    parameters_output_path = os.path.join(results_dir_with_parent, "parameters.csv")
+    df.to_csv(parameters_output_path)
+    print(f"Saved results to {parameters_output_path}")
 
     # make the parallel coordinates plot
     for model_idx, model_type in enumerate(model_types):
         fig, ax = plt.subplots(1,1, figsize=(16,8))
         plot_df_as_parallel_coordinates(df, 
-                                        [model_type+"_knot_density_max",  model_type+"_knot_density_end", model_type+"_test_loss_end", model_type+"_test_accuracy_end"], 
-                                        model_type+"_test_accuracy_end",
-                                        host = ax, title=model_type, accuracy_scale_collumns = [model_type+"_test_accuracy_end"],
-                                        same_y_scale_collumns = [[model_type+"_knot_density_max",  model_type+"_knot_density_end"]])    
+                                        ["knot_density_max",  "knot_density_end", "test_loss_end", "test_accuracy_end"], 
+                                        "test_accuracy_end",
+                                        host = ax, title=model_type, accuracy_scale_collumns = ["test_accuracy_end"],
+                                        same_y_scale_collumns = [["knot_density_max",  "knot_density_end"]])    
         plt.tight_layout()
         plt.savefig(os.path.join(results_dir_with_parent, f"parallel_coordinates_{model_type}.png"), dpi=300, bbox_inches='tight')
         plt.savefig(os.path.join(results_dir_with_parent, f"parallel_coordinates_{model_type}.svg"), bbox_inches='tight')

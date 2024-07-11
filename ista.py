@@ -152,7 +152,7 @@ class ISTAPrototype(torch.nn.Module):
             jacobian = None
 
         return jacobian
-        
+
     def data_consistency(self, x: torch.tensor, y: torch.tensor, fold_idx: int, jacobian: torch.tensor = None, jacobian_projection: torch.tensor = None):
         """
         Implements the data consistency step of the ISTA algorithm.

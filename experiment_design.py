@@ -62,6 +62,9 @@ def sample_experiment(config: dict, max_tries: int = 1000):
     # create the A matrix that belongs to these parameters
     if config["A_with_good_singular_values"]:
         A = create_random_matrix_with_good_singular_values(M, N)
+    elif config["A_is_identity"]:
+        assert M == N, "x and y must have the same dimensionality when A=I"
+        A = torch.eye(M)
     else:
         A = create_random_matrix(M, N)
     
