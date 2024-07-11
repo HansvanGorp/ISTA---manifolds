@@ -161,7 +161,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
         else:
             # create the model using the parameters in the config file
             model = ista.LISTA(A, mu = model_config["initial_mu"], _lambda = model_config["initial_lambda"], nr_folds = model_config["nr_folds"], 
-                            device = config["device"], initialize_randomly = False)
+                            device = config["device"], initialize_randomly = False, share_weights=model_config["share_weights"])
             
             regularize = (model_type == "RLISTA")
             model, train_losses, val_losses  =  train_lista(model, train_data, validation_data, model_config,show_loss_plot = False,

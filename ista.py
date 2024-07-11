@@ -278,7 +278,7 @@ class ISTA(ISTAPrototype):
 
 # %% create a LISTA module that inherits from ISTAPrototype
 class LISTA(ISTAPrototype):
-    def __init__(self, A: torch.tensor, mu: float = 0.5, _lambda: float = 0.5, nr_folds: int = 16, device: str = "cpu", initialize_randomly: bool = True):
+    def __init__(self, A: torch.tensor, mu: float = 0.5, _lambda: float = 0.5, nr_folds: int = 16, device: str = "cpu", initialize_randomly: bool = True, share_weights: bool = False):
         super(LISTA, self).__init__(A, nr_folds, device)
         """Create the LISTA module with the input parameters:
         - A (torch.tensor): the matrix A in the equation y=Ax, of shape (M, N), with M<N, i.e. M is the measurement dimension and N is the signal dimension
@@ -295,34 +295,54 @@ class LISTA(ISTAPrototype):
         # save mu and _lambda
         self.mu = mu
         self._lambda = _lambda
+        self.share_weights = share_weights
 
         if initialize_randomly:
-            self.W1   = torch.nn.ParameterList([torch.nn.Parameter(torch.randn(self.N, self.M, device=self.device)) for _ in range(nr_folds)])
-            self.W2   = torch.nn.ParameterList([torch.nn.Parameter(torch.randn(self.N, self.N, device=self.device)) for _ in range(nr_folds)])
-            self.bias = torch.nn.ParameterList([torch.nn.Parameter(torch.randn(self.N, device=self.device)) for _ in range(nr_folds)])
-
+            if share_weights:
+                self.W1 = torch.nn.Parameter(torch.randn(self.N, self.M, device=self.device))
+                self.W2 = torch.nn.Parameter(torch.randn(self.N, self.M, device=self.device))
+                self.bias = torch.nn.Parameter(torch.randn(self.N, device=self.device))
+            else:
+                self.W1   = torch.nn.ParameterList([torch.nn.Parameter(torch.randn(self.N, self.M, device=self.device)) for _ in range(nr_folds)])
+                self.W2   = torch.nn.ParameterList([torch.nn.Parameter(torch.randn(self.N, self.N, device=self.device)) for _ in range(nr_folds)])
+                self.bias = torch.nn.ParameterList([torch.nn.Parameter(torch.randn(self.N, device=self.device)) for _ in range(nr_folds)])
+ 
         else:
             # create initial W1 and W2 of Ista
             W1_initialization = self.mu*self.A.t()
             W2_initialization = torch.eye(self.N).to(self.device) - self.mu*self.A.t()@self.A
 
-            # now create the W1 and W2 as torch.nn.Parameter, but do so over all the nr_folds iterations
-            self.W1 = torch.nn.ParameterList([torch.nn.Parameter(W1_initialization.clone().detach()) for _ in range(nr_folds)])
-            self.W2 = torch.nn.ParameterList([torch.nn.Parameter(W2_initialization.clone().detach()) for _ in range(nr_folds)])
-            self.bias = torch.nn.ParameterList([torch.nn.Parameter(torch.zeros(self.N, device=self.device)) for _ in range(nr_folds)])
+            if share_weights:
+                self.W1 = torch.nn.Parameter(W1_initialization.clone().detach())
+                self.W2 = torch.nn.Parameter(W2_initialization.clone().detach())
+                self.bias = torch.nn.Parameter(torch.zeros(self.N, device=self.device))
+            else:
+                # now create the W1 and W2 as torch.nn.Parameter, but do so over all the nr_folds iterations
+                self.W1 = torch.nn.ParameterList([torch.nn.Parameter(W1_initialization.clone().detach()) for _ in range(nr_folds)])
+                self.W2 = torch.nn.ParameterList([torch.nn.Parameter(W2_initialization.clone().detach()) for _ in range(nr_folds)])
+                self.bias = torch.nn.ParameterList([torch.nn.Parameter(torch.zeros(self.N, device=self.device)) for _ in range(nr_folds)])
 
     # The prototype requires three functions to be implemented by the inherited modules:
     def get_W1_at_iteration(self, fold_idx):
-        # return the W1 at the current iteration
-        return self.W1[fold_idx]
+        if self.share_weights:
+            return self.W1
+        else:
+            # return the W1 at the current iteration
+            return self.W1[fold_idx]
     
     def get_W2_at_iteration(self, fold_idx):
-        # return the W2 at the current iteration
-        return self.W2[fold_idx]
+        if self.share_weights:
+            return self.W2
+        else:
+            # return the W2 at the current iteration
+            return self.W2[fold_idx]
     
     def get_bias_at_iteration(self, fold_idx):
-        # return the bias at the current iteration
-        return self.bias[fold_idx]
+        if self.share_weights:
+            return self.bias
+        else:
+            # return the bias at the current iteration
+            return self.bias[fold_idx]
     
     def get_lambda_at_iteration(self, fold_idx):
         # simply return _lambda, LISTA does not change _lambda over iterations

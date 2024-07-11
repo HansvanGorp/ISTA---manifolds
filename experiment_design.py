@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import os
 import numpy as np
 import warnings
+from scipy.linalg import toeplitz
+import torch.nn.functional as F
 
 # %%
 def create_random_matrix_with_good_singular_values(M: int, N: int):
@@ -41,6 +43,28 @@ def create_random_matrix(M: int, N: int):
     return A
 
 
+def create_convolution_matrix(M: int, N: int, kernel_size: int = 5):
+    assert kernel_size <= N, "❗️ Your kernel should be smaller than the signal dimension N"
+    # generate a random kernel sampled from standard normal
+    kernel = np.random.randn(kernel_size)
+    half_kernel_size = kernel_size//2 
+    # create a convolution sliding-window matrix with this kernel
+    r = *kernel[half_kernel_size:], *np.zeros(N - (half_kernel_size + 1))
+    c = *np.flip(kernel[:half_kernel_size + 1]), *np.zeros(N - (half_kernel_size+1))
+    t = toeplitz(c=c, r=r)
+    conv_matrix = torch.tensor(t)
+
+    if M != N:
+        print("❗️ Note: M and N are not equal, so the convolution matrix will be zero-padded or cropped.")
+        if M > N:
+            return torch.hstack(conv_matrix, torch.zeros((M-N, N)))
+        if M < N:
+            return conv_matrix[:M, :N]
+    
+    return conv_matrix
+    
+
+
 def sample_experiment(config: dict, max_tries: int = 1000):
     """
     This function will sample parameters that vary to create an experiment.
@@ -59,9 +83,13 @@ def sample_experiment(config: dict, max_tries: int = 1000):
         # for-else triggers if the for loop did not break (i.e. we did not find valid parameters after max_tries)
         raise ValueError("Could not find valid parameters after {} tries.".format(max_tries))
 
+    assert np.sum([config["A_with_good_singular_values"], config["A_is_convolution"], config["A_is_identity"]]) < 2, "❗️ You may not choose more than one type of A matrix."
+
     # create the A matrix that belongs to these parameters
     if config["A_with_good_singular_values"]:
         A = create_random_matrix_with_good_singular_values(M, N)
+    elif config["A_is_convolution"]:
+        A = create_convolution_matrix(M, N)
     elif config["A_is_identity"]:
         assert M == N, "x and y must have the same dimensionality when A=I"
         A = torch.eye(M)
