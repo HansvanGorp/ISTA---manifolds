@@ -232,6 +232,9 @@ def train_lista(model: LISTA, train_data: ISTAData, validation_data: ISTAData, m
     dataloader_train = torch.utils.data.DataLoader(train_data, batch_size=model_config["batch_size"],    shuffle=True, drop_last=False)
     dataloader_val = torch.utils.data.DataLoader(validation_data, batch_size=model_config["batch_size"], shuffle=False, drop_last=False)
     optimizer = torch.optim.Adam(model.parameters(), lr=model_config["learning_rate"])
+
+    if regularize and model_config['regularization']['type'] == 'pointcloud':
+        model_config['regularization']['sigma_y'] = estimate_y_std(train_data)
                                  
     nr_of_epochs = model_config["nr_of_epochs"]
     nr_batches_per_epoch = len(dataloader_train)
@@ -316,10 +319,38 @@ def get_regularization_loss(model: LISTA, regularize_config: dict):
         regularization_loss = get_regularization_loss_tv_jacobian(model, regularize_config)
     elif regularize_config["type"] == "tie_weights":
         regularization_loss = get_regularization_loss_tie_weights(model)
+    elif regularize_config["type"] == "pointcloud":
+        regularization_loss = get_regularization_loss_pointcloud(model, regularize_config)
     else:
         raise ValueError("regularize_config['type'] is not valid")
     
     return regularization_loss * regularize_config["weight"]
+
+def get_regularization_loss_pointcloud(lista: LISTA, regularize_config: dict):
+    M, N = lista.A.shape
+    num_points = regularize_config['N_points']    
+    sigma_y = regularize_config['sigma_y']
+    cloud_scale = regularize_config['cloud_scale']
+    sigma_reg = sigma_y / cloud_scale
+    sampling_center_point = sigma_y*torch.randn(1, M)
+    random_y_points = sampling_center_point + sigma_reg*torch.randn(num_points, M)
+    x, jacobian = lista.get_initial_x_and_jacobian(regularize_config["N_points"], calculate_jacobian = True)
+
+    # step 3, initialze a jacobian over time tensor of shape (nr_fold, nr_points_along_path, N, M)
+    nr_folds = lista.nr_folds
+    # jacobian_over_time = torch.zeros(nr_folds, regularize_config["N_points"], N, M, device = lista.device)
+
+    # step 4, loop over the iterations, saving the jacobian at each iteration into the jacobian_over_time tensor
+    regularization_loss = 0
+    for k in range(nr_folds):
+        x, jacobian = lista.forward_at_iteration(x, random_y_points, k, jacobian)
+        jacobian_reshaped = jacobian.reshape(regularize_config["N_points"], N*M)
+        differences = torch.mean(torch.abs(jacobian_reshaped[1:] - jacobian_reshaped[:-1]))
+        regularization_loss += differences
+        # outer_product = jacobian_reshaped @ jacobian_reshaped.T
+        # regularization_loss -= torch.mean(outer_product)
+        
+    return regularization_loss
     
 
 def get_regularization_loss_smooth_jacobian(lista: LISTA, regularize_config: dict):
@@ -398,7 +429,7 @@ def get_regularization_loss_tv_jacobian(lista: LISTA, regularize_config: dict):
     x, jacobian = lista.get_initial_x_and_jacobian(regularize_config["nr_points_along_path"], calculate_jacobian = True)
 
     # step 3, initialze a jacobian over time tensor of shape (nr_fold, nr_points_along_path, N, M)
-    nr_folds = lista.K
+    nr_folds = lista.nr_folds
     jacobian_over_time = torch.zeros(nr_folds, regularize_config["nr_points_along_path"], N, M, device = lista.device)
 
     # step 4, loop over the iterations, saving the jacobian at each iteration into the jacobian_over_time tensor
@@ -445,3 +476,9 @@ def get_regularization_loss_tie_weights(lista: LISTA):
     regularization_loss = l1_W1 + l1_W2 + l1_bias
 
     return regularization_loss
+
+def estimate_y_std(train_data):
+    ys = torch.zeros((train_data.nr_of_examples, train_data.A.shape[0]))
+    for i, (y, _) in enumerate(torch.utils.data.DataLoader(train_data, batch_size=1)):
+        ys[i] = y
+    return torch.std(y)
