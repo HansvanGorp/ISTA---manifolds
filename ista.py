@@ -276,6 +276,105 @@ class ISTA(ISTAPrototype):
         # simply return _lambda, ISTA does not change _lambda over iterations
         return self._lambda
 
+# %% create a FISTA module that inherits from ISTAPrototype
+class FISTA(ISTAPrototype):
+    # For reference, see: https://epubs.siam.org/doi/pdf/10.1137/080716542?casa_token=FPitKygai98AAAAA:Hd0FPfroFaH8n5wqnPYaRCS2NRsAMq13au6XL60EpkO_KSRvvD9s8pzKUIelOGMumOrq88uj1w
+    def __init__(self, A: torch.tensor, mu: float = 0.5, _lambda: float = 0.5, nr_folds: int = 16, device: str = "cpu"):
+        super(FISTA, self).__init__(A, nr_folds, device)
+        """Create the FISTA module with the input parameters:
+        - A (torch.tensor): the matrix A in the equation y=Ax, of shape (M, N), with M<N, i.e. M is the measurement dimension and N is the signal dimension
+        - mu (float): the step size for ISTA
+        - _lambda (float): the threshold for ISTA
+        - nr_folds (int): the number of iterations for ISTA
+        - device (str): the device to run the module on, default is "cpu"
+
+        Since ISTA inherits from ISTAPrototype, it has all the functionalities of ISTAPrototype.
+        We only need to specify the parameters that are specific to ISTA.
+        """
+
+        # save mu and _lambda
+        self.mu = mu
+        self._lambda = _lambda
+
+        # create W1 and W2 of Ista
+        self.W1 = self.mu*self.A.t()
+        self.W2 = torch.eye(self.N).to(self.device) - self.mu*self.A.t()@self.A
+
+        self.t_prev = 1
+        # x_prev is initialised in the forward_at_iteration function
+        self.x_prev = None
+        self.jacobian_prev = None
+
+    def forward_at_iteration(self, x:torch.tensor, y: torch.tensor, fold_idx: int, jacobian:torch.tensor = None, jacobian_projection: torch.tensor = None):
+        """
+        Implements the forward function of the prototype at a specific iteration.
+
+        inputs:
+        - x (torch.tensor): the current x, of shape (batch_size, N)
+        - y (torch.tensor): the input y, of shape (batch_size, M)
+        - fold_idx (int): the current iteration (this is needed to get the correct W1 and W2 matrices)
+        - jacobian (torch.tensor): the Jacobian of the forward function, of shape (batch_size, N, M), or (batch_size, N, 2) if jacobian_projection is not None
+        - jacobian_projection (torch.tensor): a projection matrix to project the Jacobian to a 2D space, for visualization, of shape (2, M)
+        """
+        # make sure things are on the correct device
+        x = x.to(self.device)
+        y = y.to(self.device)
+        jacobian = jacobian.to(self.device) if jacobian is not None else None
+        jacobian_projection = jacobian_projection.to(self.device) if jacobian_projection is not None else None
+
+        if fold_idx == 0 or self.x_prev is None:
+            # intialize x_prev and jacobian_prev as initial x and initial jacobian
+            self.x_prev = x
+            self.jacobian_prev = jacobian
+
+        # step 1, perform data-consistency
+        x, jacobian = self.data_consistency( x, y, fold_idx, jacobian, jacobian_projection)
+
+        # step 2, perform thresholding
+        # x is now equal to x_k from the FISTA paper
+        x, jacobian = self.soft_thresholding(x,    fold_idx, jacobian)
+        
+        # then compute t_{k+1}
+        t = (1 + np.sqrt(1 + 4*(self.t_prev)**2)) / 2
+        t_scaling = ((self.t_prev - 1) / t)
+        
+        # x_new is y_{k+1} from paper
+        x_new = x + t_scaling * (x - self.x_prev) 
+        
+        # compute new jacobian if needed
+        if jacobian is not None:
+            jacobian = ((1 + t_scaling) * jacobian) - (t_scaling * self.jacobian_prev)
+
+        self.x_prev = x
+        self.t_prev = t
+        self.jacobian_prev = jacobian
+
+        return x_new, jacobian
+
+    # reset params with new mu and lambda
+    def reset_params_using_mu_and_lambda(self, mu: float, _lambda: float):
+        self.mu = mu
+        self._lambda = _lambda
+        self.W1 = self.mu*self.A.t()
+        self.W2 = torch.eye(self.N).to(self.device) - self.mu*self.A.t()@self.A
+
+    # The prototype requires three functions to be implemented by the inherited modules:
+    def get_W1_at_iteration(self, fold_idx):
+        # simply return W1, ISTA does not change W1 over iterations
+        return self.W1
+    
+    def get_W2_at_iteration(self, fold_idx):
+        # simply return W2, ISTA does not change W2 over iterations
+        return self.W2
+    
+    def get_bias_at_iteration(self, fold_idx):
+        # simply return 0, ISTA does not have a bias
+        return torch.zeros(1, device = self.device)
+    
+    def get_lambda_at_iteration(self, fold_idx):
+        # simply return _lambda, ISTA does not change _lambda over iterations
+        return self._lambda
+
 # %% create a LISTA module that inherits from ISTAPrototype
 class LISTA(ISTAPrototype):
     def __init__(self, A: torch.tensor, mu: float = 0.5, _lambda: float = 0.5, nr_folds: int = 16, device: str = "cpu", initialize_randomly: bool = True, share_weights: bool = False):
