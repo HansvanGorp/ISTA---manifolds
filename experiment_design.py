@@ -52,7 +52,7 @@ def create_convolution_matrix(M: int, N: int, kernel_size: int = 5):
     r = *kernel[half_kernel_size:], *np.zeros(N - (half_kernel_size + 1))
     c = *np.flip(kernel[:half_kernel_size + 1]), *np.zeros(N - (half_kernel_size+1))
     t = toeplitz(c=c, r=r)
-    conv_matrix = torch.tensor(t)
+    conv_matrix = torch.tensor(t, dtype=torch.float32)
 
     if M != N:
         print("❗️ Note: M and N are not equal, so the convolution matrix will be zero-padded or cropped.")
