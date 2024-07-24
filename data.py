@@ -11,7 +11,7 @@ import warnings
 
 # %% data generation
 def data_generator(A: torch.tensor, nr_of_examples: int = 4, maximum_sparsity: int = 4, 
-                   x_magnitude: tuple[float,float] = (0.5, 1.5), N: int = 16, noise_std: float = 0.1):
+                   x_magnitude: tuple[float,float] = (0.5, 1.5), N: int = 16, noise_std: float = 0.1, magnitude_shift_epsilon = None):
     """
     Create some data for training LISTA. This data is simply a random x-vector, and the y-vector is created by multiplying A with x.
 
@@ -31,8 +31,9 @@ def data_generator(A: torch.tensor, nr_of_examples: int = 4, maximum_sparsity: i
     """
     # create a random x-vector
     sign      = torch.randint(0, 2, (nr_of_examples, N)) * 2 - 1
-    magnitude = torch.rand(nr_of_examples, N) * (x_magnitude[1] - x_magnitude[0]) + x_magnitude[0]
-    x         = sign * magnitude
+    x_magnitude_low, x_magnitude_high = perturb_x_magnitudes(x_magnitude[0], x_magnitude[1], magnitude_shift_epsilon) if magnitude_shift_epsilon else (x_magnitude[0], x_magnitude[1])
+    magnitude = torch.rand(nr_of_examples, N) * (x_magnitude_high - x_magnitude_low) + x_magnitude_low
+    x         = sign * magnitude        
 
     # create a mask that makes sure the x-vector is at most maximum_sparsity, or even less than that
     mask = torch.zeros(nr_of_examples, N)
@@ -52,7 +53,7 @@ def data_generator(A: torch.tensor, nr_of_examples: int = 4, maximum_sparsity: i
 # %% the pytorch dataset class 
 class ISTAData(torch.utils.data.Dataset):
     def __init__(self, A: torch.tensor, nr_of_examples: int = 4, maximum_sparsity: int = 4, 
-                 x_magnitude: tuple[float,float] = (0.5, 1.5), N: int = 16, noise_std: float = 0.1):
+                 x_magnitude: tuple[float,float] = (0.5, 1.5), N: int = 16, noise_std: float = 0.1, magnitude_shift_epsilon = None):
         """
         Create a pytorch dataset for training LISTA. This dataset creates random x-vectors and y-vectors by multiplying A with x.
 
@@ -76,22 +77,34 @@ class ISTAData(torch.utils.data.Dataset):
         self.noise_std = noise_std
 
         # create the data
-        self.y, self.x = data_generator(A, nr_of_examples, maximum_sparsity, x_magnitude, N, noise_std)
+        self.y, self.x = data_generator(A, nr_of_examples, maximum_sparsity, x_magnitude, N, noise_std, magnitude_shift_epsilon)
 
     def __len__(self):
         return self.nr_of_examples
 
     def __getitem__(self, idx):
         return self.y[idx], self.x[idx]
+   
+def make_distribution_shift_transform(N, epsilon):
+    # x_transformed = (I + \epsilon*a)x + \epsilon*b
+    # A ~ N; b ~ N
+    A = torch.randn(N, N)
+    b = torch.randn(N)
+    return lambda x: torch.matmul(x, (torch.eye(N) + A*epsilon)) + epsilon*b # add epsilon*a on the diag
+    
+def perturb_x_magnitudes(x_magnitude_low, x_magnitude_high, epsilon):
+    a = torch.randn(1) * epsilon
+    b = torch.randn(1) * epsilon
+    return x_magnitude_low + a, x_magnitude_high + b
     
 def create_train_validation_test_datasets(A: torch.tensor, maximum_sparsity: int = 4, x_magnitude: tuple[float,float] = (0.5, 1.5), N: int = 16, noise_std: float = 0.1,
-                                          nr_of_examples_train: int = 4, nr_of_examples_validation: int = 4, nr_of_examples_test: int = 4):
+                                          nr_of_examples_train: int = 4, nr_of_examples_validation: int = 4, nr_of_examples_test: int = 4, test_magnitude_shift_epsilon: float = 0.0):
     """
     Create three datasets with the same parameters, except for the number of examples.
     """
     train_data      = ISTAData(A, nr_of_examples_train, maximum_sparsity, x_magnitude, N, noise_std)
     validation_data = ISTAData(A, nr_of_examples_validation, maximum_sparsity, x_magnitude, N, noise_std)
-    test_data       = ISTAData(A, nr_of_examples_test, maximum_sparsity, x_magnitude, N, noise_std)
+    test_data       = ISTAData(A, nr_of_examples_test, maximum_sparsity, x_magnitude, N, noise_std, test_magnitude_shift_epsilon)
 
     return train_data, validation_data, test_data
     
