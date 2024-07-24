@@ -8,8 +8,9 @@ import matplotlib.pyplot as plt
 import os
 import numpy as np
 import warnings
+from typing import Union
 
-from ista import ISTA, LISTA
+from ista import ISTA, FISTA, LISTA
 from data import data_generator, ISTAData
 from knot_density_analysis import generate_path
 
@@ -37,10 +38,11 @@ def get_support_accuracy(x_hat: torch.tensor, x: torch.tensor):
 
     return support_accuracy
 
-def grid_search_ista(model: ISTA, train_data: ISTAData, validation_data: ISTAData, model_config: dict, tqdm_position: int=0, verbose: bool=True, tqdm_leave: bool=True):
+def grid_search_ista(model: Union[ISTA, FISTA], train_data: ISTAData, validation_data: ISTAData, model_config: dict, tqdm_position: int=0, verbose: bool=True, tqdm_leave: bool=True):
     """
     perfrom a grid search for the best mu and lambda for the ISTA module. using the data generator.
     """
+    model_name = "ISTA" if isinstance(model, ISTA) else "FISTA"
 
     # step 1, extract the data from both the training and validation data and combine them, we will use this data to calculate the loss for the grid search
     y_train, x_train = train_data.y, train_data.x
@@ -56,8 +58,8 @@ def grid_search_ista(model: ISTA, train_data: ISTAData, validation_data: ISTADat
     #accuracies = torch.zeros(len(mus), len(_lambdas))
 
     # step 3, loop over the grid
-    for i, mu in enumerate(tqdm(mus, position=tqdm_position, leave=tqdm_leave, disable=not verbose, desc="grid search for ISTA, runnning over mus")):
-        for j, _lambda in enumerate(tqdm(_lambdas, position=tqdm_position+1, leave=(tqdm_leave and (i+1)==len(mus)), disable=not verbose, desc="grid search for ISTA, runnning over lambdas")):           
+    for i, mu in enumerate(tqdm(mus, position=tqdm_position, leave=tqdm_leave, disable=not verbose, desc=f"grid search for {model_name}, runnning over mus")):
+        for j, _lambda in enumerate(tqdm(_lambdas, position=tqdm_position+1, leave=(tqdm_leave and (i+1)==len(mus)), disable=not verbose, desc=f"grid search for {model_name}, runnning over lambdas")):           
             # change the mu and lambda of the model
             model.reset_params_using_mu_and_lambda(mu, _lambda)
             

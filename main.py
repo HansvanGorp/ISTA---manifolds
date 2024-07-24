@@ -40,7 +40,7 @@ def parse_args():
         "-m",
         "--model_types",
         nargs='+',
-        default=["ISTA", "LISTA", "RLISTA"],
+        default=["ISTA", "FISTA", "LISTA", "RLISTA"],
         help="Specify which set of algorithms to run.",
     )
     return parser.parse_args()
@@ -56,6 +56,7 @@ model_types = args.model_types # the model types we are comparing
 nr_of_model_types = len(model_types) # the number of models we are comparing, ISTA, LISTA and RLISTA
 colors = {
     "ISTA": "tab:blue", 
+    "FISTA": "tab:red",
     "LISTA": "tab:orange", 
     "RLISTA": "tab:green"
 }
@@ -121,7 +122,8 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
                                                                                    N=N, noise_std = config["data_that_stays_constant"]["noise_std"],
                                                                                    nr_of_examples_train = config["data_that_stays_constant"]["nr_training_samples"],
                                                                                    nr_of_examples_validation = config["data_that_stays_constant"]["nr_validation_samples"],
-                                                                                   nr_of_examples_test = config["data_that_stays_constant"]["nr_test_samples"])
+                                                                                   nr_of_examples_test = config["data_that_stays_constant"]["nr_test_samples"],
+                                                                                   test_magnitude_shift_epsilon = config["data_that_stays_constant"]["test_distribution_shift_epsilon"])
     
     # save the data in .tar files
     results_dir_this_experiment_data = os.path.join(results_dir_with_parent, str(experiment_id), "data")
@@ -140,10 +142,11 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
         model_folder = os.path.join(results_dir_this_experiment, model_type)
         os.makedirs(model_folder, exist_ok=True)
             
-        # check if this is ISTA, in which case the parameters are found by grid search
-        if model_type == "ISTA":
-            # create the ISTA model with mu=0 and lambda=0
-            model = ista.ISTA(A, mu = 0, _lambda = 0, nr_folds = model_config["nr_folds"], device = config["device"])
+        # check if this is ISTA or FISTA, in which case the parameters are found by grid search
+        if model_type == "ISTA" or model_type == "FISTA":
+            model_class = ista.ISTA if model_type == "ISTA" else ista.FISTA
+            # create the ISTA/FISTA model with mu=0 and lambda=0
+            model = model_class(A, mu = 0, _lambda = 0, nr_folds = model_config["nr_folds"], device = config["device"])
 
             # perform grid search on ISTA for the best lambda and mu for these parameters
             model, mu, _lambda, losses, tested_mus, tested_lambdas = grid_search_ista(model, train_data, validation_data, model_config, tqdm_position=1, verbose=True, tqdm_leave=tqdm_leave)
@@ -153,8 +156,8 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
                 yaml.dump({"mu": mu.cpu().item(), "lambda": _lambda.cpu().item()}, file)   
 
             # put the losses in a .csv file, with the tested mus and lambdas as the rows and columns
-            df = pd.DataFrame(losses, index=tested_mus, columns=tested_lambdas)
-            df.to_csv(os.path.join(model_folder, "losses.csv"))
+            loss_df = pd.DataFrame(losses, index=tested_mus, columns=tested_lambdas)
+            loss_df.to_csv(os.path.join(model_folder, "losses.csv"))
 
 
         # otherwise, the model is LISTA or RLISTA, and needs to be trained
@@ -355,7 +358,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
         knot_density_last_experiment_this_model = knot_density_over_experiments[model_idx][-1]
 
         new_row["model_type"] = model_type
-        new_row["regularization_type"] = model_config['regularization']['type'] if model_type == "RLISTA" else None
+        new_row["regularization_type"] = config['RLISTA']['regularization']['type'] if model_type == "RLISTA" else None
         new_row["knot_density_max"] = knot_density_last_experiment_this_model.max().item()
         new_row["knot_density_end"] = knot_density_last_experiment_this_model[-1].item()
 
@@ -365,8 +368,8 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
         test_accuracy_last_experiment_this_model = test_accuracy_over_experiments[model_idx][-1]
         new_row["test_accuracy_end"] = test_accuracy_last_experiment_this_model[-1].item()
 
+        df = pd.concat([df, new_row], ignore_index=True)
 
-    df = pd.concat([df, new_row], ignore_index=True)
     parameters_output_path = os.path.join(results_dir_with_parent, "parameters.csv")
     df.to_csv(parameters_output_path)
     print(f"Saved results to {parameters_output_path}")
@@ -374,7 +377,7 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     # make the parallel coordinates plot
     for model_idx, model_type in enumerate(model_types):
         fig, ax = plt.subplots(1,1, figsize=(16,8))
-        plot_df_as_parallel_coordinates(df, 
+        plot_df_as_parallel_coordinates(df[df['model_type'] == model_type], 
                                         ["knot_density_max",  "knot_density_end", "test_loss_end", "test_accuracy_end"], 
                                         "test_accuracy_end",
                                         host = ax, title=model_type, accuracy_scale_collumns = ["test_accuracy_end"],
