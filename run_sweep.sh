@@ -1,13 +1,13 @@
 #!/bin/bash
-sweep_name=sweep_cloud_scale
-configs_dir=/app/configs/sweep_cloud_scale
-results_dir=/app/knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192_sweep_cloud_scale
+sweep_name=x_perturbed_3
+configs_dir=configs/x_perturbed_3
+results_dir=knot_denisty_results/x_perturbed_3
 id=$(date '+%Y-%m-%d_%H:%M:%S')
 
 echo "Running sweep ${sweep_name} with id ${id}"
 
 for config_path in "$configs_dir"/*.yaml; do 
-    python main.py --config=$config_path --model_types=RLISTA
+    python main.py --config=$config_path --model_types ISTA FISTA LISTA RLISTA
 done
 
 python generate_table_from_results.py \
