@@ -39,7 +39,7 @@ def parse_args():
 if __name__=="__main__":
     args = parse_args()
     # short ID generator to prevent overwriting
-    id = lambda: uuid.uuid4()[:4]
+    id = lambda: str(uuid.uuid4())[:4]
 
     df = pd.read_csv(args.results_table_path)
 
