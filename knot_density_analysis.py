@@ -57,7 +57,7 @@ def generate_path(M: int, nr_points_along_path: int, path_delta: float, anchor_p
 
     return y
 
-def extract_knots_from_jacobian(jacobian: torch.tensor):
+def extract_knots_from_jacobian(jacobian: torch.tensor, tolerance: float = 0):
     """
     Given a Jacobian matrix, extract the knots from it. This assumes the jacobian was created along a 1D-path.
     This makes it simpler that extracting the linear regions, as we can just use the differences between consecutive points, and count the nr of times it is non-zero.
@@ -80,7 +80,7 @@ def extract_knots_from_jacobian(jacobian: torch.tensor):
         jacobian = jacobian.view(nr_lines_in_batch, nr_points_in_line, N*Z)
 
         # calculate the differences between consecutive points
-        nr_of_knots = torch.sum(torch.any((jacobian[:,1:,:] - jacobian[:,:-1,:])>0, dim=2), dim=1)
+        nr_of_knots = torch.sum(torch.any((jacobian[:,1:,:] - jacobian[:,:-1,:])>tolerance, dim=2), dim=1)
     else:
         # get the shape of the jacobian
         nr_points_in_line, N, Z  = jacobian.shape
@@ -89,7 +89,7 @@ def extract_knots_from_jacobian(jacobian: torch.tensor):
         jacobian = jacobian.view(nr_points_in_line, N*Z)
 
         # calculate the differences between consecutive points
-        nr_of_knots = torch.sum(torch.any((jacobian[1:,:] - jacobian[:-1,:])>0, dim=1))
+        nr_of_knots = torch.sum(torch.any((jacobian[1:,:] - jacobian[:-1,:])>tolerance, dim=1))
     
     return nr_of_knots
 
@@ -97,7 +97,7 @@ def extract_knots_from_jacobian(jacobian: torch.tensor):
 def knot_density_analysis(ista: ISTA, nr_folds: int, A: torch.tensor, 
                             nr_paths: int = 4,  anchor_point_std: float = 1, nr_points_along_path: int = 4000, path_delta: float = 0.001, 
                             save_name: str = "test_figures", save_folder: str = "knot_density_figures", verbose: bool = False, color: str = "black",
-                            tqdm_position: int = 0, tqdm_leave: bool = True):
+                            tqdm_position: int = 0, tqdm_leave: bool = True, tolerance: float = 0):
     """
     We sample random lines in the y-space, and see how many knots we get over the iterations.
     We can then divide the knots by the lenght of the line, to get a knot-density.
@@ -116,6 +116,7 @@ def knot_density_analysis(ista: ISTA, nr_folds: int, A: torch.tensor,
     - save_folder: the folder to save the figure in
     - verbose: if True, print a progress bar
     - color: the color of the plot
+    - tolerance: TODO
     """
     # empty the CUDA cache
     torch.cuda.empty_cache()
@@ -147,7 +148,7 @@ def knot_density_analysis(ista: ISTA, nr_folds: int, A: torch.tensor,
                 x, jacobian = ista.forward_at_iteration(x, y, fold_idx, jacobian)
 
             # extract the number of knots in the jacobian, along the batch dimension
-            nr_of_knots =  extract_knots_from_jacobian(jacobian)
+            nr_of_knots =  extract_knots_from_jacobian(jacobian, tolerance=tolerance)
             knot_density = nr_of_knots.cpu() / length_of_path
             knot_density_array[path_idx, fold_idx+1] = knot_density
 

@@ -16,6 +16,7 @@ import time
 import pandas as pd
 import argparse
 import uuid
+from pathlib import Path
 
 # local imports
 import ista
@@ -68,8 +69,9 @@ colors = {
 torch.manual_seed(config["seed"])
 np.random.seed(config["seed"])
 
+config_file_name = os.path.splitext(os.path.basename(Path(args.config)))[0]
 # create the directory to save the results, check first if it already exists, if so stop, and query the user if it should be overwritten
-results_dir_with_parent = os.path.join("knot_denisty_results", config["results_dir"], str(uuid.uuid4()))
+results_dir_with_parent = os.path.join("knot_denisty_results", config["results_dir"], config_file_name+'_'+str(uuid.uuid4())[:4])
 if os.path.exists(results_dir_with_parent):
     print(f"\nThis results directory already exists: {config['results_dir']}")
     print("Do you want to overwrite it? (y/n)")	
@@ -94,6 +96,8 @@ print("\nStarting the experiments")
 knot_density_over_experiments  = [[] for _ in range(nr_of_model_types)]
 test_loss_over_experiments     = [[] for _ in range(nr_of_model_types)]
 test_accuracy_over_experiments = [[] for _ in range(nr_of_model_types)]
+train_accuracy_over_experiments = [[] for _ in range(nr_of_model_types)]
+train_loss_over_experiments     = [[] for _ in range(nr_of_model_types)]
 
 # initiale the df for the parallel coordinates plot, each row will be an experiment
 # the df has the following columns: M, N, K, noise_std, mu, lambda, knot_density_ista_max,  knot_density_ista_end, knot_density_lista_max, knot_density_lista_end
@@ -184,6 +188,9 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
         # evaluate the model on the test set
         test_loss = get_loss_on_dataset_over_folds(model, test_data)
         test_accuracy = get_support_accuracy_on_dataset_over_folds(model, test_data)
+        
+        train_accuracy = get_support_accuracy_on_dataset_over_folds(model, train_data)
+        train_accuracy_over_experiments[model_idx].append(train_accuracy)
 
         # save the test loss in a .tar file and to the lists
         torch.save(test_loss, os.path.join(model_folder, "test_loss.tar"))
@@ -260,7 +267,11 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
     for model_idx, model_type in enumerate(model_types):
         test_accuracy = test_accuracy_over_experiments[model_idx][-1]
         folds = np.arange(0, len(test_accuracy))
-        plt.plot(folds, test_accuracy, label = model_type, c = colors[model_type])
+        plt.plot(folds, test_accuracy, label = f"{model_type}_test", c = colors[model_type])
+        
+        train_accuracy = train_accuracy_over_experiments[model_idx][-1]
+        folds = np.arange(0, len(train_accuracy))
+        plt.plot(folds, train_accuracy, label = f"{model_type}_train", c = colors[model_type], linestyle='--')
         max_folds = max(max_folds, len(test_accuracy))
 
     plt.grid()
@@ -335,9 +346,17 @@ for experiment_id in tqdm(range(config["max_nr_of_experiments"]), position=0, de
         test_accuracy_mean = test_accuracy_over_experiments_this_model.mean(dim=0)
         test_accuracy_std  = test_accuracy_over_experiments_this_model.std(dim=0)
         folds = np.arange(0, len(test_accuracy_mean))
-        plt.plot(folds, test_accuracy_mean, label = model_type, c = colors[model_type])
+        plt.plot(folds, test_accuracy_mean, label = f"{model_type}_test", c = colors[model_type], linestyle="-")
         plt.fill_between(folds, test_accuracy_mean - test_accuracy_std, test_accuracy_mean + test_accuracy_std, alpha=0.3, color=colors[model_type])
         max_folds = max(max_folds, len(test_accuracy_mean))
+        
+        train_accuracy_over_experiments_this_model = train_accuracy_over_experiments[model_idx]
+        train_accuracy_over_experiments_this_model = torch.stack(train_accuracy_over_experiments_this_model)
+        train_accuracy_mean = train_accuracy_over_experiments_this_model.mean(dim=0)
+        train_accuracy_std  = train_accuracy_over_experiments_this_model.std(dim=0)
+        folds = np.arange(0, len(train_accuracy_mean))
+        plt.plot(folds, train_accuracy_mean, label = f"{model_type}_train", c = colors[model_type], linestyle="--")
+        plt.fill_between(folds, train_accuracy_mean - train_accuracy_std, train_accuracy_mean + train_accuracy_std, alpha=0.3, color=colors[model_type])
 
     plt.grid()
     plt.xlabel("fold")

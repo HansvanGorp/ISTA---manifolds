@@ -205,8 +205,8 @@ def create_anchors_from_x_indices(indices: tuple[int,int,int], A:torch.tensor, a
     M, N = A.shape
 
     # create the anchor points
-    x_anchors = torch.zeros(3, N)
-    y_anchors = torch.zeros(3, M)
+    x_anchors = torch.zeros(3, N, device=A.device)
+    y_anchors = torch.zeros(3, M, device=A.device)
     for i in range(3):
         if indices[i] is not None:
             x_anchors[i, indices[i]] = 1
@@ -276,7 +276,7 @@ def extract_sparsity_label_from_x(x):
     
 # %% visual analysis of ISTA along a hyperplane
 def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:dict, A: torch.tensor, save_folder: str = "test_figures", #NOSONAR
-                            tqdm_position: int = 0, tqdm_leave: bool = True, verbose: bool = False, color_by: str = " norm"):
+                            tqdm_position: int = 0, tqdm_leave: bool = True, verbose: bool = False, color_by: str = " norm", folds_to_visualize=[0, 1, 15, 127]):
     """
     Creates a visual analysis of the ISTA module. This is done by visualizing the linear regions of the Jacobian, and the sparsity of the x-vector.
     We only visualize in part of the space, namely a hyperplane that passes through three anchor points. This hyperplane is embedded in y-space,
@@ -303,6 +303,7 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
     - tqdm_position: the position of the tqdm bar
     - tqdm_leave: if True, leave the tqdm bar
     - verbose: if True, print a progress bar
+    - folds_to_visualize: a list of fold_idxs to visualize. If empty, all folds will be visualized.
     """
     # get the model config
     nr_folds = model_config["nr_folds"]
@@ -365,7 +366,7 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
 
     # if we want to plot the data regions, we need to create a function that does this  
     if plot_data_regions:
-        data_on_plane = DataOnPlane(A, data_region_extend, y_anchors, K=K, consider_partials=False, only_positive=only_positive)
+        data_on_plane = DataOnPlane(A.cpu(), data_region_extend, y_anchors.cpu(), K=K, consider_partials=False, only_positive=only_positive)
 
     # loop over the iterations
     for fold_idx in tqdm(range(nr_folds), position=tqdm_position, leave=tqdm_leave, disable=not verbose, desc="visual analysis of ISTA, runnning over folds"):
@@ -373,76 +374,77 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
             with torch.no_grad():
                 x, jacobian = ista.forward_at_iteration(x, y, fold_idx, jacobian, jacobian_projection)
 
-            # extract the linear regions from the jacobian
-            nr_of_regions, norms, _, jacobian_labels = extract_linear_regions_from_jacobian(jacobian, tolerance = tolerance)       
+            if fold_idx in folds_to_visualize:
+                # extract the linear regions from the jacobian
+                nr_of_regions, norms, _, jacobian_labels = extract_linear_regions_from_jacobian(jacobian, tolerance = tolerance)       
 
-            # extract the sparsity label from x
-            sparsity_label, unique_labels = extract_sparsity_label_from_x(x)
-            sparsity_label_reshaped = sparsity_label.reshape(nr_points_along_axis, nr_points_along_axis)
+                # extract the sparsity label from x
+                sparsity_label, unique_labels = extract_sparsity_label_from_x(x)
+                sparsity_label_reshaped = sparsity_label.reshape(nr_points_along_axis, nr_points_along_axis)
 
-            # compress the sparsity label to the unique labels
-            sparsity_label_reshaped = sparsity_label_reshaped.unique(return_inverse=True)[1].reshape(nr_points_along_axis, nr_points_along_axis)
-            unique_labels = sparsity_label_reshaped.unique()
+                # compress the sparsity label to the unique labels
+                sparsity_label_reshaped = sparsity_label_reshaped.unique(return_inverse=True)[1].reshape(nr_points_along_axis, nr_points_along_axis)
+                unique_labels = sparsity_label_reshaped.unique()
 
-            # figure out what to color by
-            if color_by == "norm":
-                norms_reshaped = norms.reshape(nr_points_along_axis, nr_points_along_axis)
-                norms_reshaped = torch.log(norms_reshaped + 1) 
-                color_data = norms_reshaped.cpu()
-                cmap = 'cividis'
-            elif color_by == "jacobian_label":
-                jacobian_labels_reshaped = jacobian_labels.reshape(nr_points_along_axis, nr_points_along_axis)
-                color_data = map_to_colors(jacobian_labels_reshaped).cpu()
-                cmap = 'tab20'
-            elif color_by == "jacobian_pca":
-                color_data = perform_pca_on_jacobian(jacobian)
-                color_data = color_data.cpu()
-                color_data = color_data.reshape(nr_points_along_axis, nr_points_along_axis, 3)
-                cmap = None
-            else:
-                raise ValueError("color_by should be either 'norm' or 'jacobian_label'")
+                # figure out what to color by
+                if color_by == "norm":
+                    norms_reshaped = norms.reshape(nr_points_along_axis, nr_points_along_axis)
+                    norms_reshaped = torch.log(norms_reshaped + 1) 
+                    color_data = norms_reshaped.cpu()
+                    cmap = 'cividis'
+                elif color_by == "jacobian_label":
+                    jacobian_labels_reshaped = jacobian_labels.reshape(nr_points_along_axis, nr_points_along_axis)
+                    color_data = map_to_colors(jacobian_labels_reshaped).cpu()
+                    cmap = 'tab20'
+                elif color_by == "jacobian_pca":
+                    color_data = perform_pca_on_jacobian(jacobian)
+                    color_data = color_data.cpu()
+                    color_data = color_data.reshape(nr_points_along_axis, nr_points_along_axis, 3)
+                    cmap = None
+                else:
+                    raise ValueError("color_by should be either 'norm' or 'jacobian_label'")
 
-            # create the three names of the anchor points
-            anchor_names = ["anchor x-index: "] * 3
-            for i in range(3):
-                anchor_names[i] += str(indices_of_projection[i]) if indices_of_projection[i] is not None else "origin"
+                # create the three names of the anchor points
+                anchor_names = ["anchor x-index: "] * 3
+                for i in range(3):
+                    anchor_names[i] += str(indices_of_projection[i]) if indices_of_projection[i] is not None else "origin"
 
-            # plot the results
-            dpi = matplotlib.rcParams['figure.dpi']
-            nr_pixels_along_axis = nr_points_along_axis
-            fig_size_along_axis = nr_pixels_along_axis / dpi
+                # plot the results
+                dpi = matplotlib.rcParams['figure.dpi']
+                nr_pixels_along_axis = nr_points_along_axis
+                fig_size_along_axis = nr_pixels_along_axis / dpi
 
-            fig = plt.figure(figsize=(fig_size_along_axis, fig_size_along_axis))
-            ax = fig.add_axes([0, 0, 1, 1])
-            ax.axis('off')
-            if cmap is None:
-                ax.imshow(color_data, extent=[xmin, xmax, ymin, ymax], origin="lower", zorder = -10)
-            else:
-                ax.imshow(color_data, extent=[xmin, xmax, ymin, ymax], cmap = cmap, vmin = 0, vmax = color_data.max(), origin="lower", zorder = -10)
-            
-            if plot_data_regions:
-                data_on_plane.plot_data_regions(show_legend=False, colors = ["white","white","white"], ax = ax)
-            # else: 
-            #     # scatter three points, at 0,0 and 1,0 and 0,1 and put a legen with the anchor points
-            #     plt.scatter(0,         0,         c= 'white', label = anchor_names[0], zorder = 10, marker='x', s = 50)
-            #     plt.scatter(magntiude, 0,         c= 'white', label = anchor_names[1], zorder = 10, marker='o', s = 50)
-            #     plt.scatter(0,         magntiude, c= 'white', label = anchor_names[2], zorder = 10, marker='s', s = 50)
-            #     plt.legend()
+                fig = plt.figure(figsize=(fig_size_along_axis, fig_size_along_axis))
+                ax = fig.add_axes([0, 0, 1, 1])
+                ax.axis('off')
+                if cmap is None:
+                    ax.imshow(color_data, extent=[xmin, xmax, ymin, ymax], origin="lower", zorder = -10)
+                else:
+                    ax.imshow(color_data, extent=[xmin, xmax, ymin, ymax], cmap = cmap, vmin = 0, vmax = color_data.max(), origin="lower", zorder = -10)
+                
+                if plot_data_regions:
+                    data_on_plane.plot_data_regions(show_legend=False, colors = ["white","white","white"], ax = ax)
+                # else: 
+                #     # scatter three points, at 0,0 and 1,0 and 0,1 and put a legen with the anchor points
+                #     plt.scatter(0,         0,         c= 'white', label = anchor_names[0], zorder = 10, marker='x', s = 50)
+                #     plt.scatter(magntiude, 0,         c= 'white', label = anchor_names[1], zorder = 10, marker='o', s = 50)
+                #     plt.scatter(0,         magntiude, c= 'white', label = anchor_names[2], zorder = 10, marker='s', s = 50)
+                #     plt.legend()
 
-            # # put a contour plot around the sparsity labels
-            if draw_decision_boundary:
-                ax.contour(Z2, Z1, sparsity_label_reshaped.cpu(), levels=unique_labels.cpu(), colors='k', linewidths=1, linestyles='solid', extent=[xmin, xmax, ymin, ymax], zorder = 1, origin="lower")
-            
-            # x and y limits
-            ax.set_xlim([xmin, xmax])
-            ax.set_ylim([ymin, ymax])
+                # # put a contour plot around the sparsity labels
+                if draw_decision_boundary:
+                    ax.contour(Z2, Z1, sparsity_label_reshaped.cpu(), levels=unique_labels.cpu(), colors='k', linewidths=1, linestyles='solid', extent=[xmin, xmax, ymin, ymax], zorder = 1, origin="lower")
+                
+                # x and y limits
+                ax.set_xlim([xmin, xmax])
+                ax.set_ylim([ymin, ymax])
 
-            # save the figure
-            plt.savefig(f"{save_folder}/iteration_{fold_idx}.png")
-            plt.close()
+                # save the figure
+                plt.savefig(f"{save_folder}/iteration_{fold_idx}.png")
+                plt.close()
 
-            # save the number of regions
-            nr_regions_arrray[fold_idx] = nr_of_regions
+                # save the number of regions
+                nr_regions_arrray[fold_idx] = nr_of_regions
         
         except RuntimeError as e:
             nr_regions_arrray[fold_idx] = np.nan
@@ -459,6 +461,7 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
     plt.savefig(f"{save_folder}/nr_regions_over_iterations.jpg", dpi=300, bbox_inches='tight') # save the figure as a jpg
     plt.savefig(f"{save_folder}/nr_regions_over_iterations.svg", bbox_inches='tight')          # save the figure as a svg
     plt.close()
+    print(f"Hyperplane analysis saved to {save_folder}.")
 
     return nr_regions_arrray
 

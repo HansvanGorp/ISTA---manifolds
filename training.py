@@ -15,7 +15,7 @@ from data import data_generator, ISTAData
 from knot_density_analysis import generate_path
 
 # %% ISTA
-def get_support_accuracy(x_hat: torch.tensor, x: torch.tensor):
+def get_support_accuracy(x_hat: torch.tensor, x: torch.tensor, tolerance=0):
     """
     get the support accuracy of a batch of x_hat compared to x
     """
@@ -27,8 +27,8 @@ def get_support_accuracy(x_hat: torch.tensor, x: torch.tensor):
         x = x.unsqueeze(2).expand_as(x_hat)
 
     # get the support accuracy
-    support_of_x = (x != 0)
-    support_of_x_hat = (x_hat != 0)
+    support_of_x = (torch.abs(x) <= tolerance)
+    support_of_x_hat = (torch.abs(x_hat) <= tolerance)
 
     equal_support = (support_of_x == support_of_x_hat)
 
@@ -104,7 +104,7 @@ def get_loss_on_dataset_over_folds(model: ISTA, datset: ISTAData):
 
     return loss_per_fold
 
-def get_support_accuracy_on_dataset_over_folds(model: ISTA, datset: ISTAData):
+def get_support_accuracy_on_dataset_over_folds(model: ISTA, datset: ISTAData, tolerance=0):
     """
     get the support accuracy of a model on an entire dataset over the folds
     """
@@ -116,14 +116,14 @@ def get_support_accuracy_on_dataset_over_folds(model: ISTA, datset: ISTAData):
 
     support_accuracy_per_fold = torch.zeros(model.nr_folds)
     for k in range(model.nr_folds):
-        support_accuracy_per_fold[k] = get_support_accuracy(x_hat[:,:,k], x)
+        support_accuracy_per_fold[k] = get_support_accuracy(x_hat[:,:,k], x, tolerance=tolerance)
 
     return support_accuracy_per_fold
 
 
 def calculate_loss(x_hat: torch.tensor, x: torch.tensor, model: LISTA, model_config: dict, regularize: bool=False):
     # calculate the l1 loss over the K folds
-    reconstruction_loss = get_reconstruction_loss(x, x_hat)
+    reconstruction_loss = get_reconstruction_loss(x, x_hat, model_config["l1_weight"], model_config["l2_weight"])
 
     # now check if we need to regularize
     if regularize:
