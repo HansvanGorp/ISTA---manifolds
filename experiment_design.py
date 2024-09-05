@@ -43,6 +43,34 @@ def create_random_matrix(M: int, N: int):
     return A
 
 
+def create_unpadded_conv_matrix(M: int, N: int, kernel_size: int = 9):
+    """
+    Creates a matrix for an unpadded 1D convolution with a random kernel.
+
+    Parameters:
+    - signal_length: Length of the input signal.
+    - kernel: The convolution kernel (filter) as a 1D array.
+
+    Returns:
+    - conv_matrix: The Toeplitz-like matrix of size (signal_length - kernel_length + 1) x signal_length.
+    """
+    assert M == (N - (kernel_size - 1)), "Using unpadded conv imposes a size constraint on M"
+    kernel = np.random.randn(kernel_size)
+    conv_matrix_length = N - kernel_size + 1
+    
+    # Initialize the Toeplitz-like matrix with zeros
+    conv_matrix = np.zeros((conv_matrix_length, N))
+
+    # Fill the Toeplitz-like matrix with shifted versions of the kernel
+    for i in range(conv_matrix_length):
+        conv_matrix[i, i:i + kernel_size] = kernel
+
+    # normalize to preserve data std
+    conv_matrix = conv_matrix / N**0.5
+
+    return torch.tensor(conv_matrix, dtype=torch.float32)
+
+
 def create_convolution_matrix(M: int, N: int, kernel_size: int = 5):
     assert kernel_size <= N, "❗️ Your kernel should be smaller than the signal dimension N"
     # generate a random kernel sampled from standard normal
@@ -89,7 +117,7 @@ def sample_experiment(config: dict, max_tries: int = 1000):
     if config["A_with_good_singular_values"]:
         A = create_random_matrix_with_good_singular_values(M, N)
     elif config["A_is_convolution"]:
-        A = create_convolution_matrix(M, N)
+        A = create_unpadded_conv_matrix(M, N)
     elif config["A_is_identity"]:
         assert M == N, "x and y must have the same dimensionality when A=I"
         A = torch.eye(M)

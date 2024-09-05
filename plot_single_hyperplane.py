@@ -3,11 +3,14 @@ This script will load a single experiment as specified in the config file and pl
 """
 
 # %% imports
+from pathlib import Path
 # standard library imports
 import torch
 from tqdm import tqdm
 import matplotlib
 import matplotlib.pyplot as plt
+plt.style.use("/ISTA---manifolds/ieee.mplstyle")
+plt.rcParams['text.usetex'] = True
 import os
 import numpy as np
 import warnings
@@ -25,7 +28,7 @@ np.random.seed(0)
 torch.manual_seed(0)
 
 # %% load the configuration file
-plot_config_file = "config_plot_single_hyperplane.yaml"
+plot_config_file = Path("configs/config_plot_single_hyperplane.yaml")
 with open(plot_config_file, 'r') as file:
     plot_config = yaml.load(file, Loader=yaml.FullLoader)
 
@@ -140,7 +143,7 @@ ymax = max_magnitude + margin
 
 # if we are using jacboian labels, we need to create a map to colors object
 if color_by == "jacobian_label":
-    map_to_colors = ha.MapToColors(8)
+    map_to_colors = ha.MapToColors(10)
 
 # extract the linear regions from the jacobian
 nr_of_regions, norms, _, jacobian_labels = ha.extract_linear_regions_from_jacobian(jacobian, tolerance = tolerance)    
@@ -161,17 +164,19 @@ if color_by == "norm":
     cmap = 'cividis'
 elif color_by == "jacobian_label":
     jacobian_labels_reshaped = jacobian_labels.reshape(nr_points_along_axis, nr_points_along_axis)
-    color_data = map_to_colors(jacobian_labels_reshaped).cpu()
+    # color_data = map_to_colors(jacobian_labels_reshaped).cpu()
+    color_data = jacobian_labels_reshaped
     cmap = 'tab20'
 else:
     raise ValueError("color_by should be either 'norm' or 'jacobian_label'")
 
 # plot the results with exact dpi
-dpi = matplotlib.rcParams['figure.dpi']
-nr_pixels_along_axis = nr_points_along_axis
-fig_size_along_axis = nr_pixels_along_axis / dpi
+# dpi = matplotlib.rcParams['figure.dpi']
+# nr_pixels_along_axis = nr_points_along_axis
+# fig_size_along_axis = nr_pixels_along_axis / dpi
 
-fig = plt.figure(figsize=(fig_size_along_axis, fig_size_along_axis))
+# fig = plt.figure(figsize=(fig_size_along_axis, fig_size_along_axis))
+fig = plt.figure(figsize=(3, 3))
 
 
 if plot_config["axis_off"]:
@@ -179,8 +184,8 @@ if plot_config["axis_off"]:
     ax.axis('off')
 elif anchor_on_y_instead:
     ax = fig.add_axes([0.1, 0.1, 0.9, 0.9])
-    ax.set_xlabel("y1")
-    ax.set_ylabel("y2")
+    ax.set_xlabel(r'$\mathbf{y}_1$', fontsize=11)
+    ax.set_ylabel(r'$\mathbf{y}_2$', fontsize=11)
 else:
     ax = fig.add_axes([0.1, 0.1, 0.9, 0.9])
     ax.set_xlabel("x1")
@@ -193,7 +198,7 @@ if plot_data_regions:
     data_on_plane.plot_data_regions(show_legend=False, colors = ["white","white","white"], ax = ax)
 
 if draw_decision_boundary:
-    ax.contour(Z2, Z1, sparsity_label_reshaped.cpu(), levels=unique_labels.cpu(), colors='k', linewidths=1, linestyles='solid', extent=[xmin, xmax, ymin, ymax], zorder = 1, origin="lower")
+    ax.contour(Z2, Z1, sparsity_label_reshaped.cpu(), levels=unique_labels.cpu(), colors='k', linewidths=0.5, linestyles='solid', extent=[xmin, xmax, ymin, ymax], zorder = 1, origin="lower")
 
 # set limits
 ax.set_xlim([xmin, xmax])
@@ -210,7 +215,7 @@ if plot_config["draw_path"]:
     path = np.array([point_0, point_1, point_2, point_3, point_4])
 
     # draw the path
-    ax.plot(path[:,0], path[:,1], color = "white", zorder = 2, linewidth = 2)
+    ax.plot(path[:,0], path[:,1], color = "white", zorder = 2, linewidth = 1)
 
     # figure out where the path crosses from one jacobian to another, for this we leverage jacobian_labels_reshaped
     for i in range(1, path.shape[0]):
@@ -229,7 +234,7 @@ if plot_config["draw_path"]:
 
             # if they are different, we need to draw a knot
             if jacobian_label_start != jacobian_label_end:
-                ax.plot(point_0[0], point_0[1], 'o', color = "white", markersize = 8, zorder = 2)
+                ax.plot(point_0[0], point_0[1], 'o', color = "white", markersize = 2, zorder = 2)
     
 
 
@@ -240,7 +245,6 @@ if not os.path.exists(figure_dir):
 
 # save the figure to the correct location in .svg format
 figure_name = os.path.join(figure_dir, plot_config["figure_name"]+".png")
-plt.savefig(figure_name)
-
-# show it
-plt.show()
+plt.savefig(figure_name, bbox_inches='tight', pad_inches=0.1)
+plt.savefig(os.path.join(figure_dir, plot_config["figure_name"]+".pdf"), bbox_inches='tight', pad_inches=0.1)
+print(f"✅ Saved fig to {figure_name}")

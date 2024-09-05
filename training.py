@@ -9,6 +9,7 @@ import os
 import numpy as np
 import warnings
 from typing import Union
+from scipy.spatial import distance
 
 from ista import ISTA, FISTA, LISTA
 from data import data_generator, ISTAData
@@ -88,7 +89,7 @@ def grid_search_ista(model: Union[ISTA, FISTA], train_data: ISTAData, validation
     return model, best_mu, best_lambda, losses, mus.numpy(), _lambdas.numpy()
 
 # %% LISTA
-def get_loss_on_dataset_over_folds(model: ISTA, datset: ISTAData):
+def get_loss_on_dataset_over_folds(model: ISTA, datset: ISTAData, l1_weight=1.0, l2_weight=1.0):
     """
     get the loss of a model on an entire dataset over the folds
     """
@@ -100,7 +101,7 @@ def get_loss_on_dataset_over_folds(model: ISTA, datset: ISTAData):
 
     loss_per_fold = torch.zeros(model.nr_folds)
     for k in range(model.nr_folds):
-        loss_per_fold[k] = get_reconstruction_loss(x_hat[:,:,k], x, l1_weight=1.0, l2_weight=1.0)
+        loss_per_fold[k] = get_reconstruction_loss(x_hat[:,:,k], x, l1_weight=l1_weight, l2_weight=l2_weight)
 
     return loss_per_fold
 
@@ -121,13 +122,13 @@ def get_support_accuracy_on_dataset_over_folds(model: ISTA, datset: ISTAData, to
     return support_accuracy_per_fold
 
 
-def calculate_loss(x_hat: torch.tensor, x: torch.tensor, model: LISTA, model_config: dict, regularize: bool=False):
+def calculate_loss(x_hat: torch.tensor, x: torch.tensor, y: torch.tensor, model: LISTA, model_config: dict, regularize: bool=False):
     # calculate the l1 loss over the K folds
     reconstruction_loss = get_reconstruction_loss(x, x_hat, model_config["l1_weight"], model_config["l2_weight"])
 
     # now check if we need to regularize
     if regularize:
-        regularization_loss = get_regularization_loss(model, model_config["regularization"])
+        regularization_loss = get_regularization_loss(model, model_config["regularization"], y)
     else:
         regularization_loss = torch.zeros(1, device=x.device)
 
@@ -169,7 +170,7 @@ def go_over_validation_set(model: LISTA, dataloader_val: torch.utils.data.DataLo
             x_hat, _ = model(y, verbose = False, return_intermediate = True, calculate_jacobian = False)
             x = x.unsqueeze(2).expand_as(x_hat).to(x_hat.device)
 
-        total_loss, reconstruction_loss, regularization_loss = calculate_loss(x_hat, x, model, model_config, regularize)
+        total_loss, reconstruction_loss, regularization_loss = calculate_loss(x_hat, x, y, model, model_config, regularize)
 
 
         # save the losses
@@ -226,7 +227,7 @@ def plot_loss(fraction_idx: torch.tensor, epoch_idx: torch.tensor, fractions: to
 
 def train_lista(model: LISTA, train_data: ISTAData, validation_data: ISTAData, model_config: dict, 
                 show_loss_plot: bool=False, loss_folder: str=None, save_name: str=None, regularize: bool=False,
-                tqdm_position: int=0, verbose: bool=True, tqdm_leave: bool=True):
+                tqdm_position: int=0, verbose: bool=True, tqdm_leave: bool=True, save: bool = True, compute_loss_on_final_output: bool = False):
     """
     perfrom training of (R)LISTA module. using the data.
     """
@@ -237,6 +238,7 @@ def train_lista(model: LISTA, train_data: ISTAData, validation_data: ISTAData, m
 
     if regularize and model_config['regularization']['type'] == 'pointcloud':
         model_config['regularization']['sigma_y'] = estimate_y_std(train_data)
+        # model_config['regularization']['sigma_cloud'] = average_nearest_neighbor_distance(model.train_inputs)
                                  
     nr_of_epochs = model_config["nr_of_epochs"]
     nr_batches_per_epoch = len(dataloader_train)
@@ -261,11 +263,13 @@ def train_lista(model: LISTA, train_data: ISTAData, validation_data: ISTAData, m
         # training
         model.train()
         for i, (y, x) in enumerate(tqdm(dataloader_train, position=tqdm_position+1, leave=leave_nested_bar, disable=not verbose, desc="Going over training batches")):
-            x_hat, _ = model(y, verbose = False, return_intermediate = True, calculate_jacobian = False)
-            x = x.unsqueeze(2).expand_as(x_hat).to(x_hat.device)
+            x_hat, _ = model(y, verbose = False, return_intermediate = (not compute_loss_on_final_output), calculate_jacobian = False)
+            if x_hat.shape != x.shape:
+                x = x.unsqueeze(2).expand_as(x_hat)
+            x = x.to(x_hat.device)
 
             # calculate the loss
-            total_loss, reconstruction_loss, regularization_loss = calculate_loss(x_hat, x, model, model_config, regularize)
+            total_loss, reconstruction_loss, regularization_loss = calculate_loss(x_hat, x, y, model, model_config, regularize)
 
             # optimizer step
             optimizer.zero_grad()
@@ -300,9 +304,10 @@ def train_lista(model: LISTA, train_data: ISTAData, validation_data: ISTAData, m
 
         # after each epoch, save the model of the current epoch
         state_dict = model.state_dict()
-        torch.save(state_dict,   os.path.join(loss_folder, f"{save_name}_state_dict_epoch_{epoch_idx}.tar"))
-        torch.save(train_losses, os.path.join(loss_folder, "train_loss_epoch_{epoch_idx}.tar"))
-        torch.save(val_losses,   os.path.join(loss_folder, "val_loss_epoch_{epoch_idx}.tar"))
+        if save:
+            torch.save(state_dict,   os.path.join(loss_folder, f"{save_name}_state_dict_epoch_{epoch_idx}.tar"))
+            torch.save(train_losses, os.path.join(loss_folder, "train_loss_epoch_{epoch_idx}.tar"))
+            torch.save(val_losses,   os.path.join(loss_folder, "val_loss_epoch_{epoch_idx}.tar"))
             
     # save some stuff
     state_dict = model.state_dict()
@@ -314,7 +319,7 @@ def train_lista(model: LISTA, train_data: ISTAData, validation_data: ISTAData, m
    
 
 # %% regularization
-def get_regularization_loss(model: LISTA, regularize_config: dict):
+def get_regularization_loss(model: LISTA, regularize_config: dict, y: torch.tensor):
     if regularize_config["type"] == "smooth_jacobian":
         regularization_loss = get_regularization_loss_smooth_jacobian(model, regularize_config)
     elif regularize_config["type"] == "tv_jacobian":
@@ -323,31 +328,95 @@ def get_regularization_loss(model: LISTA, regularize_config: dict):
         regularization_loss = get_regularization_loss_tie_weights(model)
     elif regularize_config["type"] == "pointcloud":
         regularization_loss = get_regularization_loss_pointcloud(model, regularize_config)
+    elif regularize_config["type"] == "L2":
+        regularization_loss = get_regularization_loss_L2(model)
+    elif regularize_config["type"] == "jacobian":
+        regularization_loss = get_regularization_loss_jacobian(model, y)
     else:
         raise ValueError("regularize_config['type'] is not valid")
     
     return regularization_loss * regularize_config["weight"]
+
+def get_regularization_loss_jacobian(model: LISTA, y: torch.tensor):
+    batch_size = len(y) 
+    x, jacobian = model.get_initial_x_and_jacobian(batch_size, calculate_jacobian = True)
+    for k in range(model.nr_folds):
+        x, jacobian = model.forward_at_iteration(x, y, k, jacobian)
+        
+    return torch.norm(jacobian)
+
+def get_regularization_loss_L2(model):
+    l2_loss = 0
+    for param in model.W1:
+        l2_loss += (torch.norm(param)**2)
+    for param in model.W2:
+        l2_loss += (torch.norm(param)**2)
+    for param in model.bias:
+        l2_loss += (torch.norm(param)**2)
+    return l2_loss
+
+
+def min_nearest_neighbor_distance(vectors):
+    """
+    Computes the average distance to the nearest neighbor for a list of vectors.
+
+    Parameters:
+    vectors (numpy.ndarray): A 2D array where each row represents a vector.
+
+    Returns:
+    float: The average nearest neighbor distance.
+    """
+    n = len(vectors)
+    if n < 2:
+        raise ValueError("At least two vectors are required to compute nearest neighbor distances.")
+
+    # Compute the pairwise distance matrix
+    dist_matrix = distance.cdist(vectors, vectors, 'euclidean')
+
+    # Set the diagonal to infinity to ignore self-distances
+    np.fill_diagonal(dist_matrix, np.inf)
+
+    # Find the nearest neighbor distance for each vector
+    nearest_distances = np.min(dist_matrix, axis=1)
+    
+    # Compute the average nearest neighbor distance
+    avg_distance = np.median(nearest_distances)
+    
+    return avg_distance
 
 def get_regularization_loss_pointcloud(lista: LISTA, regularize_config: dict):
     M, N = lista.A.shape
     num_points = regularize_config['N_points']    
     sigma_y = regularize_config['sigma_y']
     cloud_scale = regularize_config['cloud_scale']
+    num_clouds = regularize_config['num_clouds']
+    if not regularize_config.get("input_sampling", False):
+        sampling_center_points = sigma_y*torch.randn(num_clouds, M)
+    else:
+        sampled_indices = torch.randint(low=0, high=lista.train_inputs.shape[0], size=(num_clouds,))
+        sampling_center_points = lista.train_inputs[sampled_indices]
     sigma_reg = sigma_y / cloud_scale
-    sampling_center_point = sigma_y*torch.randn(1, M)
-    random_y_points = sampling_center_point + sigma_reg*torch.randn(num_points, M)
-    x, jacobian = lista.get_initial_x_and_jacobian(regularize_config["N_points"], calculate_jacobian = True)
+    random_y_points = torch.vstack([center_point + sigma_reg*torch.randn(num_points, M) for center_point in sampling_center_points])
+    batch_size = len(random_y_points)
+        
+    regularization_loss = 0
+    x, jacobian = lista.get_initial_x_and_jacobian(batch_size, calculate_jacobian = True)
 
     # step 3, initialze a jacobian over time tensor of shape (nr_fold, nr_points_along_path, N, M)
     nr_folds = lista.nr_folds
     # jacobian_over_time = torch.zeros(nr_folds, regularize_config["N_points"], N, M, device = lista.device)
 
     # step 4, loop over the iterations, saving the jacobian at each iteration into the jacobian_over_time tensor
-    regularization_loss = 0
     for k in range(nr_folds):
         x, jacobian = lista.forward_at_iteration(x, random_y_points, k, jacobian)
-        jacobian_reshaped = jacobian.reshape(regularize_config["N_points"], N*M)
-        differences = torch.mean(torch.abs(jacobian_reshaped[1:] - jacobian_reshaped[:-1]))
+        jacobian_reshaped = jacobian.reshape((num_clouds, num_points, N*M))
+        # compute the difference in jacobian between random pairs of points in the same cloud
+        differences = torch.mean(
+            torch.tensor([
+                torch.mean(torch.abs(pointcloud_jacobians[1:] - pointcloud_jacobians[:-1])) 
+                for pointcloud_jacobians in jacobian_reshaped
+            ])
+        )
         regularization_loss += differences
         # outer_product = jacobian_reshaped @ jacobian_reshaped.T
         # regularization_loss -= torch.mean(outer_product)

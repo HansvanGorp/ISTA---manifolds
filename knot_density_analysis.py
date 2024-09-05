@@ -12,17 +12,30 @@ import warnings
 from ista import ISTA
 
 # %% helper functions
-def generate_path(M: int, nr_points_along_path: int, path_delta: float, anchor_point_std: float, device: str):
+def generate_path(M: int, nr_points_along_path: int, path_delta: float, anchor_point_std: float, ista: ISTA, anchor_on_inputs: bool = False, anchor_on_sphere: bool = False):
     """
     generate a random path, this is done by sampling two anchor points, and then creating a path between them with a step size of path_delta.
     If we have do not yet reach the nr_points_along_path, we sample a new anchor point, and continue our path towards that, etc. etc.
     This is done untill we hit nr_points_along_path. Note that we can thus quit early before reaching the final anchor point. As we always exactly use nr_points_along_path points
     with a fixed delta between the points. The length of the path is thus always the same.
     """
-
+    device = ista.device
+    
+    def sample_new_anchor_point():
+        if anchor_on_sphere:
+            point = torch.randn(M, device=device)
+            norm = torch.norm(point)
+            point_on_sphere = anchor_point_std * point / norm
+            return point_on_sphere
+        elif anchor_on_inputs:
+            sampled_index = torch.randint(low=0, high=ista.train_inputs.shape[0], size=(1,))
+            return ista.train_inputs[sampled_index].to(device)
+        else:
+            return torch.randn(M, device = device) * anchor_point_std
+        
     # step one, sample anchor point 0
-    anchor_point_zero = torch.randn(M, device = device) * anchor_point_std
-
+    anchor_point_zero = sample_new_anchor_point()
+    
     # initialze the current length of the path
     current_length = 0
     
@@ -32,7 +45,7 @@ def generate_path(M: int, nr_points_along_path: int, path_delta: float, anchor_p
     # keep looping untill we hit current_length == nr_points_along_path
     while current_length < nr_points_along_path:
         # sample a new anchor point
-        anchor_point_one = torch.randn(M, device = device) * anchor_point_std
+        anchor_point_one = sample_new_anchor_point()
 
         # calculate the direction vector
         direction_vector = (anchor_point_one - anchor_point_zero) / torch.linalg.norm(anchor_point_one - anchor_point_zero, ord=2)
@@ -95,9 +108,9 @@ def extract_knots_from_jacobian(jacobian: torch.tensor, tolerance: float = 0):
 
 # %% main knot density analysis function
 def knot_density_analysis(ista: ISTA, nr_folds: int, A: torch.tensor, 
-                            nr_paths: int = 4,  anchor_point_std: float = 1, nr_points_along_path: int = 4000, path_delta: float = 0.001, 
+                            nr_paths: int = 4,  anchor_point_std: float = 1, nr_points_along_path: int = 4000, path_delta: float = 0.001, anchor_on_inputs: bool = False,
                             save_name: str = "test_figures", save_folder: str = "knot_density_figures", verbose: bool = False, color: str = "black",
-                            tqdm_position: int = 0, tqdm_leave: bool = True, tolerance: float = 0):
+                            tqdm_position: int = 0, tqdm_leave: bool = True, tolerance: float = 0, anchor_on_sphere: bool = False):
     """
     We sample random lines in the y-space, and see how many knots we get over the iterations.
     We can then divide the knots by the lenght of the line, to get a knot-density.
@@ -137,7 +150,7 @@ def knot_density_analysis(ista: ISTA, nr_folds: int, A: torch.tensor,
 
     # loop over the lines, with tqdm enabled if verbose is True
     for path_idx in tqdm(range(nr_paths), position=tqdm_position, leave=tqdm_leave, disable=not verbose, desc="knot density analysis, runnning over paths"):
-        y = generate_path(M, nr_points_along_path, path_delta, anchor_point_std, ista.device)
+        y = generate_path(M, nr_points_along_path, path_delta, anchor_point_std, ista, anchor_on_inputs, anchor_on_sphere=anchor_on_sphere)
 
         # run the initials function to get the initial x and jacobian
         x, jacobian = ista.get_initial_x_and_jacobian(nr_points_along_path, calculate_jacobian = True)

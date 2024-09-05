@@ -1,6 +1,8 @@
 """
 This script creates the functions used to analyze the linear regions of (RL)ISTA along a hyperplane.
 """
+from pathlib import Path
+import yaml
 import torch
 from tqdm import tqdm
 import matplotlib
@@ -276,7 +278,7 @@ def extract_sparsity_label_from_x(x):
     
 # %% visual analysis of ISTA along a hyperplane
 def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:dict, A: torch.tensor, save_folder: str = "test_figures", #NOSONAR
-                            tqdm_position: int = 0, tqdm_leave: bool = True, verbose: bool = False, color_by: str = " norm", folds_to_visualize=[0, 1, 15, 127]):
+                            tqdm_position: int = 0, tqdm_leave: bool = True, verbose: bool = False, color_by: str = " norm", folds_to_visualize=[0, 1, 15, 31]):
     """
     Creates a visual analysis of the ISTA module. This is done by visualizing the linear regions of the Jacobian, and the sparsity of the x-vector.
     We only visualize in part of the space, namely a hyperplane that passes through three anchor points. This hyperplane is embedded in y-space,
@@ -464,4 +466,30 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
     print(f"Hyperplane analysis saved to {save_folder}.")
 
     return nr_regions_arrray
+
+
+if __name__ == "__main__":
+    from analyse_trained_model import load_model
+    EXPERIMENT_ROOT = Path("/ISTA---manifolds/knot_denisty_results/toeplitz/4_28_32_eec0")
+    RUN_ID = "0"
+    MODEL_NAME = "ToeplitzLISTA"
+    OUTDIR = "hyperplane_test"
+    FOLDS_TO_VISUALIZE = [0, 1, 5, 9]
+    
+    experiment_run_path = EXPERIMENT_ROOT / RUN_ID        
+    with open(EXPERIMENT_ROOT / "config.yaml", 'r') as file:
+        config = yaml.load(file, Loader=yaml.FullLoader)
+
+    datasets = {
+        'test': torch.load(experiment_run_path / "data/test_data.tar"),
+        'train': torch.load(experiment_run_path / "data/train_data.tar"),
+    }
+
+    print(f"Running for {MODEL_NAME}")
+    model = load_model(MODEL_NAME, experiment_run_path / f"{MODEL_NAME}/{MODEL_NAME}_state_dict.tar", experiment_run_path / "A.tar", train_dataset = datasets["train"], experiment_run_path=experiment_run_path)
+    if MODEL_NAME == "ToeplitzLISTA":
+        model_config = config["LISTA"]
+    else:
+        model_config = config[MODEL_NAME]
+    visual_analysis_of_ista(model, config[MODEL_NAME], config["Hyperplane"], model.A.cpu(), save_folder = OUTDIR, tqdm_position=1, verbose = True, color_by="jacobian_label", folds_to_visualize=FOLDS_TO_VISUALIZE)
 
