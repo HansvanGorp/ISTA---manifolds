@@ -19,24 +19,14 @@ from training import get_loss_on_dataset_over_folds
 from knot_density_analysis import knot_density_analysis
 from hyper_plane_analysis import visual_analysis_of_ista
 
-###
 
-# WHAT MODELS TO ANALYSE
-# EXPERIMENT_ROOT = Path("/ISTA---manifolds/knot_denisty_results/x_more_ill_posed_4/3_8_24_w=1e-4_aa78")
-# EXPERIMENT_ROOT = Path("/ISTA---manifolds/knot_denisty_results/x_l1_2/3_8_32_w=1e-4_5978")
-# EXPERIMENT_ROOT = Path("/ISTA---manifolds/interesting_results/used_in_paper/4_8_32_w=1e-4_f267")
-# EXPERIMENT_ROOT = Path("/ISTA---manifolds/interesting_results/used_in_paper/4_8_32_from_sweep_bfc3")
-# EXPERIMENT_ROOT = Path("/ISTA---manifolds/interesting_results/used_in_paper/3_8_24_w=1e-4_aa78")
-# EXPERIMENT_ROOT = Path("/ISTA---manifolds/knot_denisty_results/sweep_noise_levels/4_8_24/4_8_24_n=0.01_a3b9")
-# EXPERIMENT_ROOT = Path("/ISTA---manifolds/knot_denisty_results/sweep_noise_levels/8_64_64/8_64_64_n=0.01_0d6d")
-
+# OUT_ID = "4_24_32"
 OUT_ID = "8_64_64"
-# OUT_ID = "8_64_64"
 
 if OUT_ID == "4_24_32":
-    EXPERIMENT_ROOT = Path("/ISTA---manifolds/knot_denisty_results/review_response/4_24_32_num_folds/4_24_32_n=0.01_num_folds=10_c9a0")
+    EXPERIMENT_ROOT = Path("/ISTA---manifolds/knot_denisty_results/main_experiments/4_24_32_num_folds/4_24_32_n=0.01_num_folds=10_c9a0")
 elif OUT_ID == "8_64_64":
-    EXPERIMENT_ROOT = Path("/ISTA---manifolds/knot_denisty_results/review_response/8_64_64_num_folds/8_64_64_n=0.01_num_folds=10_014f")
+    EXPERIMENT_ROOT = Path("/ISTA---manifolds/knot_denisty_results/main_experiments/8_64_64_num_folds/8_64_64_n=0.01_num_folds=10_014f")
 
 MODEL_NAMES = ["ISTA", "LISTA"]
 RUN_IDS = ["0", "1", "2"] #, "2", "3", "4"]
@@ -85,26 +75,6 @@ colors = {
 L1_WEIGHT = 1.0 if LOSS == "L1" else 0.0
 L2_WEIGHT = 1.0 if LOSS == "L2" else 0.0
 
-# def plot_x_and_x_hat(x, x_hat):
-#     fig, axes = plt.subplots(1, 2, figsize=(10, 12))
-
-#     # Display the first image in the first subplot
-#     axes[0].imshow(x.cpu().detach().numpy()[...,0])
-#     axes[0].axis('off')  # Hide the axis
-#     axes[0].set_title('Target x')
-
-#     # Display the second image in the second subplot
-#     axes[1].imshow(x_hat.cpu().detach().numpy()[0].T)
-#     axes[1].set_title('x_hat')
-#     axes[1].set_ylabel('fold idx')
-#     axes[1].get_xaxis().set_visible(False)
-
-#     # Adjust spacing between subplots
-#     plt.tight_layout()
-
-#     # Save the figure containing both images
-#     fig.savefig('x_hat.png')
-#     plt.clf()
     
 def get_cmap(model_name):
     if colors[model_name] == "tab:orange":

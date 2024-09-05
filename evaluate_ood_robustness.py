@@ -30,14 +30,14 @@ def parse_args():
         "-b",
         "--output_dir",
         type=str,
-        default="/ISTA---manifolds/knot_denisty_results/review_response/plots",
+        default="/ISTA---manifolds/knot_denisty_results/main_experiments/plots",
         help="Path to dir containing original experiment results",
     )
     parser.add_argument(
         "-s",
         "--sweep_root",
         type=str,
-        default="/ISTA---manifolds/knot_denisty_results/review_response/4_24_32_L2",
+        default="/ISTA---manifolds/knot_denisty_results/main_experiments/4_24_32_L2",
         help="Path to dir containing post-training results",
     )
     parser.add_argument(
@@ -109,19 +109,6 @@ def run_experiment(config, model_name, experiment_root, A_matrices, train_datase
     
     # return mean and std err of losses
     return np.mean(results, axis=0)[-1], (np.std(results, axis=0)[-1] / np.sqrt(len(results)))
-    
-    
-# def get_or_run_experiment(cache_root, config, model_name, experiment_root, A_matrices, train_datasets, test_datasets): 
-#     if not cache_root.exists():
-#         cache_root.mkdir(parents=True, exist_ok=True)
-#     cache_path = cache_root / f"{str(experiment_root).replace('/', '_')}_{model_name}.npz"
-#     if os.path.exists(cache_path):
-#         cached_results = np.load(cache_path)
-#         loss_mean, loss_stderr = cached_results['loss_mean'], cached_results['loss_stderr']
-#     else:
-#         loss_mean, loss_stderr = run_experiment(config=config, model_name=model_name, experiment_root=experiment_root, A_matrices=A_matrices, train_datasets=train_datasets, test_datasets=test_datasets)
-#         np.savez(cache_path, loss_mean=loss_mean, loss_stderr=loss_stderr)
-#     return loss_mean, loss_stderr
 
 def perturb_dataset_with_measurement_noise(dataset: ISTAData, noise_std):
     dataset.y = dataset.y + (torch.randn_like(dataset.y) * noise_std)
@@ -147,9 +134,7 @@ if __name__ == "__main__":
     perturbation_fn_name = 'perturb_dataset_with_measurement_noise'
     chosen_perturbation_fn = perturbation_fns[perturbation_fn_name]
         
-    # noise_levels = [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1]
-    noise_levels = [0.0, 0.025, 0.05, 0.075, 0.1, 0.125] # , 0.06, 0.07, 0.08, 0.09, 0.1]    
-    # noise_levels = [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06] # 0.07] # 0.08, 0.09, 0.1]
+    noise_levels = [0.0, 0.025, 0.05, 0.075, 0.1, 0.125] 
     filename_append = "8_64_64"
     perturbations = {
         'noise=0.0': lambda data: chosen_perturbation_fn(data, 0.0),
@@ -158,14 +143,6 @@ if __name__ == "__main__":
         'noise=0.075': lambda data: chosen_perturbation_fn(data, 0.075),
         'noise=0.1': lambda data: chosen_perturbation_fn(data, 0.1),
         'noise=0.125': lambda data: chosen_perturbation_fn(data, 0.125),
-        # 'noise=0.05': lambda data: chosen_perturbation_fn(data, 0.05),
-        # 'noise=0.06': lambda data: chosen_perturbation_fn(data, 0.06),
-        # 'noise=0.07': lambda data: chosen_perturbation_fn(data, 0.07),
-        # 'noise=0.08': lambda data: chosen_perturbation_fn(data, 0.08),
-        # 'noise=0.09': lambda data: chosen_perturbation_fn(data, 0.09),
-        # 'noise=0.1': lambda data: chosen_perturbation_fn(data, 0.1),
-        # 'noise=0.15': lambda data: chosen_perturbation_fn(data, 0.15),
-        # 'noise=0.2': lambda data: chosen_perturbation_fn(data, 0.2),
     }
     if "4_24_32_L2" in args.sweep_root:
         noise_levels.append(0.15)

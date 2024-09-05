@@ -35,46 +35,12 @@ marker_map = {
 
 if __name__ == "__main__": 
     BASE_EXPERIMENT_ROOTS = {
-        'K=4, M=24, N=32': Path("/ISTA---manifolds/knot_denisty_results/review_response/4_24_32_L2"),
-        'K=8, M=64, N=64': Path("/ISTA---manifolds/knot_denisty_results/review_response/8_64_64_L2"), 
+        'K=4, M=24, N=32': Path("/ISTA---manifolds/knot_denisty_results/main_experiments/4_24_32_L2"),
+        'K=8, M=64, N=64': Path("/ISTA---manifolds/knot_denisty_results/main_experiments/8_64_64_L2"), 
     }
     regularization_type = "L2"
     crop_after_zeros = 0
     
-    BASE_EXPERIMENT_ROOTS = {
-        'K=4, M=24, N=32': Path("/ISTA---manifolds/knot_denisty_results/review_response/4_24_32_L2_no_bias_reg"),
-        'K=8, M=64, N=64': Path("/ISTA---manifolds/knot_denisty_results/review_response/8_64_64_L2_no_bias_reg"), 
-    }
-    regularization_type = "L2"
-    crop_after_zeros = 0
-    
-    # 4 24 32 L2
-    # BASE_EXPERIMENT_ROOTS = {
-    #     'Post Training': Path("/ISTA---manifolds/knot_denisty_results/review_response/4_24_32_num_folds/4_24_32_n=0.01_num_folds=10_c9a0/post_training_L2"),
-    #     'Regular L2': Path("/ISTA---manifolds/knot_denisty_results/review_response/4_24_32_L2"),
-    # }    
-    # regularization_type = "L2"
-    
-    # 4 24 32 Jacobian
-    # BASE_EXPERIMENT_ROOTS = {
-    #     'Post Training': Path("//ISTA---manifolds/knot_denisty_results/review_response/4_24_32_num_folds/4_24_32_n=0.01_num_folds=10_c9a0/post_training_jacobian"),
-    #     'Regular Jacobian': Path("/ISTA---manifolds/knot_denisty_results/review_response/4_24_32_jacob"),
-    # }    
-    # regularization_type = "Jacobian"
-    
-    # 8 64 64 L2
-    # BASE_EXPERIMENT_ROOTS = {
-    #     'Post Training': Path("/ISTA---manifolds/knot_denisty_results/review_response/8_64_64_num_folds/8_64_64_n=0.01_num_folds=10_014f/post_training_L2"),
-    #     'Regular L2': Path("/ISTA---manifolds/knot_denisty_results/review_response/8_64_64_L2"),
-    # }    
-    # regularization_type = "L2"
-    
-    # 8 64 64 Jacobian
-    # BASE_EXPERIMENT_ROOTS = {
-    #     'Post Training': Path("/ISTA---manifolds/knot_denisty_results/review_response/8_64_64_num_folds/8_64_64_n=0.01_num_folds=10_014f/post_training_jacobian"),
-    #     'Regular Jacobian': Path("/ISTA---manifolds/knot_denisty_results/review_response/8_64_64_jacob"),
-    # }    
-    # regularization_type = "Jacobian"
     for experiment_name, base_experiment_root in BASE_EXPERIMENT_ROOTS.items():
         child_dirs = [path for path in base_experiment_root.iterdir() if path.is_dir()]
 
