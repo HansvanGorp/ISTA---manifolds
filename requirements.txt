@@ -1,0 +1,9 @@
+pyyaml
+pandas
+tqdm
+matplotlib
+imageio
+natsort
+numpy==1.23.5
+numba
+scipy
