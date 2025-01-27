@@ -1,0 +1,6 @@
+Unnamed: 0,M,N,K,model_type,regularization_type,knot_density_max,knot_density_end,test_loss_end,test_accuracy_end,path
+0,2,3,2,RLISTA,pointcloud,113.42620086669922,112.73955535888672,0.4536995887756347,44.04296875,/app/knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192_sweep_reg_weight/68ab6884-cf17-40dd-a337-4c385bd37508/parameters.csv
+0,2,3,2,RLISTA,pointcloud,109.26245880126952,108.9668197631836,0.485430896282196,49.8046875,/app/knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192_sweep_reg_weight/e7d82c59-bb72-4b1f-8b70-52362b4f471b/parameters.csv
+0,2,3,2,RLISTA,pointcloud,111.5150375366211,111.5150375366211,0.4985198080539703,46.19140625,/app/knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192_sweep_reg_weight/fcc285e7-7151-469e-a19a-92969e4efef2/parameters.csv
+0,2,3,2,RLISTA,pointcloud,113.2411880493164,113.2411880493164,0.4659111499786377,47.265625,/app/knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192_sweep_reg_weight/68d279f3-3e74-481b-86d3-e6e460301520/parameters.csv
+0,2,3,2,RLISTA,pointcloud,117.07686614990234,117.07686614990234,0.4766533970832824,50.1953125,/app/knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192_sweep_reg_weight/23384675-cd1e-4a1b-86bb-b672eee1e867/parameters.csv

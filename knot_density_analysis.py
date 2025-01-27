@@ -42,10 +42,13 @@ def generate_path(M: int, nr_points_along_path: int, path_delta: float, anchor_p
     # initialize the y data
     y = torch.zeros(nr_points_along_path, M, device = device)
 
+    anchor_points = [anchor_point_zero.cpu().numpy().flatten()]
+
     # keep looping untill we hit current_length == nr_points_along_path
     while current_length < nr_points_along_path:
         # sample a new anchor point
         anchor_point_one = sample_new_anchor_point()
+        anchor_points.append(anchor_point_one.cpu().numpy().flatten())
 
         # calculate the direction vector
         direction_vector = (anchor_point_one - anchor_point_zero) / torch.linalg.norm(anchor_point_one - anchor_point_zero, ord=2)
@@ -68,7 +71,7 @@ def generate_path(M: int, nr_points_along_path: int, path_delta: float, anchor_p
     # assert current length is equal to nr_points_along_path
     assert current_length == nr_points_along_path, "current_length should be equal to nr_points_along_path"
 
-    return y
+    return y, torch.tensor(np.array(anchor_points))
 
 def extract_knots_from_jacobian(jacobian: torch.tensor, tolerance: float = 0):
     """
@@ -148,9 +151,11 @@ def knot_density_analysis(ista: ISTA, nr_folds: int, A: torch.tensor,
     # precalculate the lenght of the path
     length_of_path = path_delta * nr_points_along_path
 
+    all_anchor_points = []
     # loop over the lines, with tqdm enabled if verbose is True
     for path_idx in tqdm(range(nr_paths), position=tqdm_position, leave=tqdm_leave, disable=not verbose, desc="knot density analysis, runnning over paths"):
-        y = generate_path(M, nr_points_along_path, path_delta, anchor_point_std, ista, anchor_on_inputs, anchor_on_sphere=anchor_on_sphere)
+        y, anchor_points = generate_path(M, nr_points_along_path, path_delta, anchor_point_std, ista, anchor_on_inputs, anchor_on_sphere=anchor_on_sphere)
+        all_anchor_points.append(anchor_points)
 
         # run the initials function to get the initial x and jacobian
         x, jacobian = ista.get_initial_x_and_jacobian(nr_points_along_path, calculate_jacobian = True)
@@ -167,6 +172,7 @@ def knot_density_analysis(ista: ISTA, nr_folds: int, A: torch.tensor,
 
     # take the mean along the paths
     knot_denity_mean = torch.mean(knot_density_array, dim=0)
+
     
     # plot the knot density over the iterations
     plt.figure()
@@ -183,4 +189,4 @@ def knot_density_analysis(ista: ISTA, nr_folds: int, A: torch.tensor,
     plt.close()
 
     # give the knot density array back
-    return knot_denity_mean
+    return knot_density_array, all_anchor_points

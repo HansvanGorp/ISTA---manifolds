@@ -15,6 +15,7 @@ from scipy.linalg import null_space
 from ista import ISTA
 from data_on_plane import DataOnPlane
 import ncolor
+from knot_density_analysis import knot_density_analysis
 
 # %% helper functions
 class MapToColors:
@@ -275,10 +276,35 @@ def extract_sparsity_label_from_x(x):
 
         return sparsity_label, labels
 
+def binarize_jacobian(jacobian):
+    """
+    Sets each row in the jacobian containing a non-zero value to a row of 1s
+
+    The idea is to identify which elements of the output y_i are definitely sparsified by the model.
     
+    Args:
+        jacobian: torch tensor of shape (batch_size, rows, cols)
+    
+    Returns:
+        Binary tensor of same shape as input with rows either all 0s or all 1s
+    """
+    import torch
+    
+    # Convert to torch if not already
+    if not isinstance(jacobian, torch.Tensor):
+        jacobian = torch.tensor(jacobian)
+    
+    # Find rows with any non-zero elements
+    row_mask = torch.any(torch.abs(jacobian) > 0, dim=-1, keepdim=True)
+    
+    # Expand mask to match input dimensions
+    return row_mask.expand_as(jacobian).to(jacobian.dtype)
+
+
 # %% visual analysis of ISTA along a hyperplane
 def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:dict, A: torch.tensor, save_folder: str = "test_figures", #NOSONAR
-                            tqdm_position: int = 0, tqdm_leave: bool = True, verbose: bool = False, color_by: str = " norm", folds_to_visualize=[0, 1, 15, 31]):
+                            tqdm_position: int = 0, tqdm_leave: bool = True, verbose: bool = False, color_by: str = " norm", folds_to_visualize=[0, 1, 15, 31], 
+                            train_dataset=None, plot_data=False, y_anchors=None, draw_path = True):
     """
     Creates a visual analysis of the ISTA module. This is done by visualizing the linear regions of the Jacobian, and the sparsity of the x-vector.
     We only visualize in part of the space, namely a hyperplane that passes through three anchor points. This hyperplane is embedded in y-space,
@@ -332,12 +358,17 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
         for file in os.listdir(save_folder):
             os.remove(f"{save_folder}/{file}")
 
+    if train_dataset is not None:
+        train_y = train_dataset.y
+        train_x = train_dataset.x
+
     # figure out if we need to up to magnitude
     max_magnitude = magntiude
 
-    # we create a projection matrix that projects the jacobian to a 2d space, for visualization, this is done by specifying three anchor points
-    # anchor point 0 is where the x-vector is [0,0,0,...,0]
-    y_anchors, _ = create_anchors_from_x_indices(indices_of_projection, A, anchor_on_y_instead= anchor_on_y_instead)
+    if y_anchors is None:
+        # we create a projection matrix that projects the jacobian to a 2d space, for visualization, this is done by specifying three anchor points
+        # anchor point 0 is where the x-vector is [0,0,0,...,0]
+        y_anchors, _ = create_anchors_from_x_indices(indices_of_projection, A, anchor_on_y_instead= anchor_on_y_instead)
     
     # create the projection matrix
     jacobian_projection = create_jacobian_projection_from_anchors(y_anchors)
@@ -362,6 +393,9 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
     # create an array of nr regions over the iterations
     nr_regions_arrray = torch.zeros(nr_folds)
 
+    if hyperplane_config.get('binarize', False) == True:
+        color_by = "jacobian_binary"
+
     # if we are using jacboian labels, we need to create a map to colors object
     if color_by == "jacobian_label":
         map_to_colors = MapToColors(20)
@@ -377,6 +411,8 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
                 x, jacobian = ista.forward_at_iteration(x, y, fold_idx, jacobian, jacobian_projection)
 
             if fold_idx in folds_to_visualize:
+                if hyperplane_config.get('binarize', False) == True:
+                    jacobian = binarize_jacobian(jacobian)
                 # extract the linear regions from the jacobian
                 nr_of_regions, norms, _, jacobian_labels = extract_linear_regions_from_jacobian(jacobian, tolerance = tolerance)       
 
@@ -403,6 +439,17 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
                     color_data = color_data.cpu()
                     color_data = color_data.reshape(nr_points_along_axis, nr_points_along_axis, 3)
                     cmap = None
+                elif color_by == "jacobian_binary":
+                    binary_jacobian = binarize_jacobian(jacobian)
+                    row_means = binary_jacobian.mean(dim=2) # compute whether each row is a 1 or 0 row
+                    fraction_of_1_rows = row_means.sum(dim=1)
+                    color_data = fraction_of_1_rows.reshape(nr_points_along_axis, nr_points_along_axis).cpu()
+                    cmap = 'magma_r'
+                    # sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(0, model.N))
+                    # sm.set_array([])
+                    
+                    # colorbar = plt.colorbar(sm)
+                    # colorbar.set_label('Nr non-zero', rotation=270, labelpad=15)
                 else:
                     raise ValueError("color_by should be either 'norm' or 'jacobian_label'")
 
@@ -423,9 +470,25 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
                     ax.imshow(color_data, extent=[xmin, xmax, ymin, ymax], origin="lower", zorder = -10)
                 else:
                     ax.imshow(color_data, extent=[xmin, xmax, ymin, ymax], cmap = cmap, vmin = 0, vmax = color_data.max(), origin="lower", zorder = -10)
-                
+
                 if plot_data_regions:
                     data_on_plane.plot_data_regions(show_legend=False, colors = ["white","white","white"], ax = ax)
+
+                if plot_data:
+                    # dim_x = indices_of_projection[1]
+                    # dim_y = indices_of_projection[2]
+                    
+                    # we would like to plot each of the training samples on the hyperplane
+                    # first, we need to change the basis of the training data to match the hyperplane
+                    ys_on_hyperplane = torch.tensor([np.array(data) for y in train_y if (data := data_on_plane.y_to_hyperplane_coordinates(y, tolerance=0.01)) is not None])
+                    ax.scatter(ys_on_hyperplane[:, 0].cpu(),  # x coordinates
+                        ys_on_hyperplane[:, 1].cpu(),  # y coordinates
+                        c='white',                # white markers
+                        s=100,                     # marker size
+                        edgecolor='red',          # red border
+                        linewidth=0.5,
+                        zorder=5,                 # layer above imshow
+                        marker='.') 
                 # else: 
                 #     # scatter three points, at 0,0 and 1,0 and 0,1 and put a legen with the anchor points
                 #     plt.scatter(0,         0,         c= 'white', label = anchor_names[0], zorder = 10, marker='x', s = 50)
@@ -435,15 +498,21 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
 
                 # # put a contour plot around the sparsity labels
                 if draw_decision_boundary:
-                    ax.contour(Z2, Z1, sparsity_label_reshaped.cpu(), levels=unique_labels.cpu(), colors='k', linewidths=1, linestyles='solid', extent=[xmin, xmax, ymin, ymax], zorder = 1, origin="lower")
-                
+                    ax.contour(Z2, Z1, sparsity_label_reshaped.cpu(), levels=unique_labels.cpu(), colors='white', linewidths=2, linestyles='solid', extent=[xmin, xmax, ymin, ymax], zorder = 1, origin="lower")
+
+                if draw_path:
+                    path = np.array([np.array(data_on_plane.y_to_hyperplane_coordinates(y_vector)) for y_vector in y_anchors])
+                    ax.plot(path[:,0], path[:,1], color = "white", zorder = 2, linewidth = 3, marker="x", markersize=8.5, markeredgewidth=3)
+
                 # x and y limits
                 ax.set_xlim([xmin, xmax])
                 ax.set_ylim([ymin, ymax])
 
                 # save the figure
-                plt.savefig(f"{save_folder}/iteration_{fold_idx}.png")
+                outpath = f"{save_folder}/iteration_{fold_idx}.png"
+                plt.savefig(outpath)
                 plt.close()
+                print(f"✅ Saved to {outpath}\n")
 
                 # save the number of regions
                 nr_regions_arrray[fold_idx] = nr_of_regions
@@ -470,15 +539,20 @@ def visual_analysis_of_ista(ista: ISTA, model_config: dict, hyperplane_config:di
 
 if __name__ == "__main__":
     from analyse_trained_model import load_model
-    EXPERIMENT_ROOT = Path("/ISTA---manifolds/knot_denisty_results/toeplitz/4_28_32_eec0")
+    EXPERIMENT_ROOT = Path("/mnt/z/Ultrasound-BMd/data/oisin/knot_density_results/main_experiments/estimation_error/D/4_24_32_L2/4_24_32_n=0.01_D_L2=0.025_c08b")
     RUN_ID = "0"
-    MODEL_NAME = "ToeplitzLISTA"
-    OUTDIR = "hyperplane_test"
-    FOLDS_TO_VISUALIZE = [0, 1, 5, 9]
-    
+    MODEL_NAME = "LISTA"
+    SPARSITY_MAP = True
+    OUTDIR = EXPERIMENT_ROOT / RUN_ID / MODEL_NAME / ("hyperplane/sparsity" if SPARSITY_MAP else "hyperplane/jacobian_label")
+    FOLDS_TO_VISUALIZE = list(range(10))
+    NR_PATHS = 10
+    ANCHOR_ON_INPUTS = True
+
     experiment_run_path = EXPERIMENT_ROOT / RUN_ID        
     with open(EXPERIMENT_ROOT / "config.yaml", 'r') as file:
         config = yaml.load(file, Loader=yaml.FullLoader)
+
+    config['Hyperplane']['binarize'] = SPARSITY_MAP
 
     datasets = {
         'test': torch.load(experiment_run_path / "data/test_data.tar"),
@@ -486,10 +560,28 @@ if __name__ == "__main__":
     }
 
     print(f"Running for {MODEL_NAME}")
-    model = load_model(MODEL_NAME, experiment_run_path / f"{MODEL_NAME}/{MODEL_NAME}_state_dict.tar", experiment_run_path / "A.tar", train_dataset = datasets["train"], experiment_run_path=experiment_run_path)
+
+    if MODEL_NAME == "LISTA" or MODEL_NAME == "ToeplitzLISTA":
+        model = load_model(config, MODEL_NAME, experiment_run_path / f"{MODEL_NAME}/{MODEL_NAME}_state_dict.tar", experiment_run_path / "A.tar", train_dataset = datasets["train"], experiment_run_path=experiment_run_path)
+    elif MODEL_NAME == "ISTA":
+        model = load_model(config, MODEL_NAME, None, experiment_run_path / "A.tar", train_dataset = datasets["train"], experiment_run_path=experiment_run_path)
+
     if MODEL_NAME == "ToeplitzLISTA":
         model_config = config["LISTA"]
     else:
         model_config = config[MODEL_NAME]
-    visual_analysis_of_ista(model, config[MODEL_NAME], config["Hyperplane"], model.A.cpu(), save_folder = OUTDIR, tqdm_position=1, verbose = True, color_by="jacobian_label", folds_to_visualize=FOLDS_TO_VISUALIZE)
+
+    knot_density_array, anchor_points = knot_density_analysis(model, max(FOLDS_TO_VISUALIZE), model.A, nr_paths = NR_PATHS, nr_points_along_path=config["Path"]["nr_points_along_path"], 
+                                            path_delta=config["Path"]["path_delta"], anchor_on_inputs=ANCHOR_ON_INPUTS, save_folder = ".", save_name = f"knot_density_{MODEL_NAME}",
+                                            verbose = True, tqdm_position=1)
+    
+
+    print(f"\n\nFinal Knot Density: {knot_density_array[:,-1].mean()}\n\n")
+    # randomly sample 3 anchor points for visualisation
+    selected_path = np.random.choice(NR_PATHS)
+    nr_anchor_points_along_selected_path = len(anchor_points[selected_path])
+    selected_initial_anchor_point_idx = np.random.choice(nr_anchor_points_along_selected_path - 3)
+    selected_anchor_points = anchor_points[selected_path][selected_initial_anchor_point_idx: selected_initial_anchor_point_idx + 3]
+
+    visual_analysis_of_ista(model, config[MODEL_NAME], config["Hyperplane"], model.A.cpu(), save_folder = OUTDIR, tqdm_position=1, verbose = True, color_by="jacobian_label", folds_to_visualize=FOLDS_TO_VISUALIZE, y_anchors=selected_anchor_points)
 

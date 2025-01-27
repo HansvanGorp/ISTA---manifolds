@@ -63,6 +63,12 @@ def parse_args():
         default=False,
         help="Whether to run a num folds sweep",
     )
+    parser.add_argument(
+        "--results_root",
+        type=str,
+        default="/mnt/z/Ultrasound-BMd/data/oisin/knot_density_results",
+        help="Root of results dir",
+    )
     return parser.parse_args()
 args = parse_args()
 
@@ -77,7 +83,7 @@ def run_experiment(config, model_types, plot=False, save=True, output_identifier
     nr_of_model_types = len(model_types) # the number of models we are comparing, ISTA, LISTA
     config_file_name = os.path.splitext(os.path.basename(Path(args.config)))[0]
     # create the directory to save the results, check first if it already exists, if so stop, and query the user if it should be overwritten
-    results_dir_with_parent = os.path.join("knot_denisty_results", config["results_dir"], config_file_name+"_"+output_identifier+"_"+str(uuid.uuid4())[:4])
+    results_dir_with_parent = os.path.join(args.results_root, config["results_dir"], config_file_name+"_"+output_identifier+"_"+str(uuid.uuid4())[:4])
     if os.path.exists(results_dir_with_parent):
         print(f"\nThis results directory already exists: {config['results_dir']}")
         print("Do you want to overwrite it? (y/n)")	
@@ -90,6 +96,8 @@ def run_experiment(config, model_types, plot=False, save=True, output_identifier
             raise FileExistsError(f"The results directory {config['results_dir']} already exists.")
     else:
         os.makedirs(results_dir_with_parent)
+
+    print(f"ℹ️ Results will be saved in {results_dir_with_parent}")
 
     # save the configuration file to the results directory
     with open(os.path.join(results_dir_with_parent, "config.yaml"), 'w') as file:

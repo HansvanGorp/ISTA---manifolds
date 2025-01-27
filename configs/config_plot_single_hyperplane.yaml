@@ -5,8 +5,8 @@ figure_name: "placeholder_2_3"
 iteration: 1
 
 # which experiment to load the results from
-results_dir: "test_L2_loss_M2_N3" 
-experiment_id: "0"
+results_dir: "/ISTA---manifolds/interesting_results/1_2_3_2fbd" 
+experiment_id: "2"
 model: "ISTA"
 
 # what to plot

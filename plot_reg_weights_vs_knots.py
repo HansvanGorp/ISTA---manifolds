@@ -35,8 +35,8 @@ marker_map = {
 
 if __name__ == "__main__": 
     BASE_EXPERIMENT_ROOTS = {
-        'K=4, M=24, N=32': Path("/ISTA---manifolds/knot_denisty_results/main_experiments/4_24_32_L2"),
-        'K=8, M=64, N=64': Path("/ISTA---manifolds/knot_denisty_results/main_experiments/8_64_64_L2"), 
+        'K=4, M=24, N=32': Path("/ISTA---manifolds/knot_denisty_results/review_response/4_24_32_L2_no_bias_reg"),
+        'K=8, M=64, N=64': Path("/ISTA---manifolds/knot_denisty_results/review_response/8_64_64_L2_no_bias_reg"), 
     }
     regularization_type = "L2"
     crop_after_zeros = 0
@@ -76,5 +76,5 @@ if __name__ == "__main__":
     plt.grid(True)
     filename = f'reg_weights_vs_knots_{regularization_type}.png'
     plt.savefig(filename, bbox_inches='tight', pad_inches=0.1)
-    plt.savefig(f'reg_weights_vs_knots_{regularization_type}.pdf', bbox_inches='tight', pad_inches=0.1)
+    plt.savefig(f'reg_weights_vs_knots_{regularization_type}.svg', bbox_inches='tight', pad_inches=0.1)
     print(f"✅ Saved fig to {filename}")

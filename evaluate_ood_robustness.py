@@ -30,7 +30,7 @@ def parse_args():
         "-b",
         "--output_dir",
         type=str,
-        default="/ISTA---manifolds/knot_denisty_results/main_experiments/plots",
+        default="/ISTA---manifolds/knot_denisty_results/review_response/plots",
         help="Path to dir containing original experiment results",
     )
     parser.add_argument(

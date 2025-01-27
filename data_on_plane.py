@@ -81,7 +81,7 @@ class DataOnPlane:
         return self.A @ x
 
     # function that checks if a point is on the hyperplane
-    def check_if_on_hyperplane(self, y: torch.tensor):
+    def check_if_on_hyperplane(self, y: torch.tensor, tolerance=1e-6):
         # is self.normal is None, there is no null space, so we are always on the hyperplane
         if self.normal is None:
             return 0
@@ -89,9 +89,9 @@ class DataOnPlane:
         else:
             # else we need to check the normal equation
             outcome = torch.dot(self.normal, y) - self.bias
-            if outcome > 1e-6:
+            if outcome > tolerance:
                 side = 1
-            elif outcome < -1e-6:
+            elif outcome < -tolerance:
                 side = -1
             else:
                 side = 0
@@ -99,9 +99,9 @@ class DataOnPlane:
             return side
 
     # create a function that returns the hyperplane coordinates of a y-vector
-    def y_to_hyperplane_coordinates(self, y: torch.tensor):
+    def y_to_hyperplane_coordinates(self, y: torch.tensor, tolerance=1e-6):
         # first we check if we are on the hyperplane at all, if not return None
-        if self.check_if_on_hyperplane(y) != 0:
+        if self.check_if_on_hyperplane(y, tolerance) != 0:
             return None
 
         # we are looking for a and b in such a way that this is equal to y:

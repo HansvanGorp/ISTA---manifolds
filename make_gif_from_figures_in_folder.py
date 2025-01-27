@@ -4,6 +4,7 @@ This script creates a gif from all png images in a folder. frames are ordered by
 
 import imageio
 import os
+from pathlib import Path
 from natsort import natsorted
 
 def make_gif_from_figures_in_folder(folder, animation_total_seconds):
@@ -24,3 +25,7 @@ def make_gif_from_figures_in_folder(folder, animation_total_seconds):
 
     save_path = os.path.join(folder, 'animation.gif')
     imageio.mimsave(save_path, images, duration=animation_total_seconds/len(images))
+
+if __name__ == "__main__":
+    FOLDER = Path("/mnt/z/Ultrasound-BMd/data/oisin/knot_density_results/main_experiments/estimation_error/D/4_24_32_L2/4_24_32_n=0.01_D_L2=0.0001_ae3d/0/LISTA/hyperplane/sparsity")
+    make_gif_from_figures_in_folder(FOLDER, 5)

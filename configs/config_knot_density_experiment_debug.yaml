@@ -4,22 +4,22 @@
 # general parameters
 device: "cuda:0" # device to run the experiment on
 results_dir: "debug"
-seed: 3 # seed for reproducibility
-max_nr_of_experiments: 1 # maximum number of experiments to run
+seed: 2 # seed for reproducibility
+max_nr_of_experiments: 3 # maximum number of experiments to run
 A_with_good_singular_values: False # bool to decide if we want to generate A with good singular values or just randomly
 A_is_identity: False
-A_is_convolution: True
+A_is_convolution: False
 
 # we want to run the experiment in different contexts of dimension sizes and sparsity levels of x
 # y dimension M, x dimension N, sparsity in x of K, each described by a range
 # we also have some noise in the data according to y=Ax+noise with the noise~N(0, noise_std**2)
 data_that_varies:
   K:
-    min: 2 #4
-    max: 2 #4
+    min: 4 #4
+    max: 4 #4
   M:
-    min: 32 #8
-    max: 32 #8
+    min: 28 #8
+    max: 28 #8
   N:
     min: 32 #64
     max: 32 #64
@@ -27,14 +27,14 @@ data_that_varies:
 data_that_stays_constant:
   x_magnitude: [1, 2]
   noise_std: 0.01
-  nr_training_samples:   8192 # 10 # 8192
-  nr_validation_samples: 1024 # 5 # 1024
-  nr_test_samples:       1024 # 5 # 1024
-  test_distribution_shift_epsilon: 0.1
-
+  nr_training_samples:   10 # 10 # 8192
+  nr_validation_samples: 5 # 5 # 1024
+  nr_test_samples:       5 # 5 # 1024
+  test_distribution_shift_epsilon: 0.0
+  
 # ISTA parameters
 ISTA:
-  nr_folds: 1024
+  nr_folds: 5
   mu:
     min: 0.01
     max: 2
@@ -43,10 +43,12 @@ ISTA:
     min: 0.01 # 0.01
     max: 1
     nr_points: 5
+  l1_weight: 0.0
+  l2_weight: 1.0
 
 # FISTA parameters
 FISTA:
-  nr_folds: 10
+  nr_folds: 128
   mu:
     min: 0.01
     max: 2
@@ -55,43 +57,54 @@ FISTA:
     min: 0.01 # 0.01
     max: 1
     nr_points: 5
+  l1_weight: 0.0
+  l2_weight: 1.0
 
 # LISTA parameters (Learned ISTA)
 LISTA:
-  nr_folds: 10
+  nr_folds: 128
   batch_size: 64
   nr_of_epochs: 10
   learning_rate: 0.001
-  patience: 5
+  patience: 20
   initial_mu: 1.0
   initial_lambda: 0.05
   share_weights: False
+  l1_weight: 1.0
+  l2_weight: 0.0
+  regularization:
+    type: 'L2'
+    weight: 0.1
 
 # RLISTA parameters (Regularized - Learned - ISTA)
 RLISTA:
-  nr_folds: 10
+  nr_folds: 128
   batch_size: 64
-  nr_of_epochs: 10
+  nr_of_epochs: 100
   learning_rate: 0.001
   patience: 5
   initial_mu: 1.0
   initial_lambda: 0.05
   share_weights: False
+  l1_weight: 0.0
+  l2_weight: 1.0
   regularization:
     nr_paths: 1
     anchor_point_std: 1
     nr_points_along_path: 1024 # 2^9  , 2^14
+    cloud_scale: 11
     path_delta: 0.01           # 0.01 , 0.001
-    cloud_scale: 5
     type: 'pointcloud' # pointcloud # smooth_jacobian, or tie_weights, or tv_jacobian
-    weight: 0.00001          # 0.01           , or 2          , or 100
-    N_points: 50
+    weight: 0.85          # 0.01           , or 2          , or 100
+    N_points: 60
+    num_clouds: 8
+    input_sampling: True
 
 # Path parameters
 Path:
   nr_paths: 1 # number of paths to generate
   anchor_point_std: 1 # standard deviation of the anchor points, where the path will bounce between
-  nr_points_along_path: 524288 #= 2^19
+  nr_points_along_path: 1000 #= 2^19
   path_delta: 0.001
 
 # hyperplane parameters

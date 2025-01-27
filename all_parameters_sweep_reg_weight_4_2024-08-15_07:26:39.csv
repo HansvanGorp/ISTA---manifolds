@@ -1,0 +1,10 @@
+Unnamed: 0,M,N,K,model_type,regularization_type,knot_density_max,knot_density_end,test_loss_end,test_accuracy_end,path
+0,8,32,4,RLISTA,pointcloud,923.734619140625,923.734619140625,0.072474181652069,56.25,knot_denisty_results/sweep_reg_weight_4/4_8_32_w=6e-5_870d/parameters.csv
+0,8,32,4,RLISTA,pointcloud,923.734619140625,923.734619140625,0.072474181652069,56.25,knot_denisty_results/sweep_reg_weight_4/4_8_32_w=5e-5_919d/parameters.csv
+0,8,32,4,RLISTA,pointcloud,923.734619140625,923.734619140625,0.072474181652069,56.25,knot_denisty_results/sweep_reg_weight_4/4_8_32_w=9e-5_e49d/parameters.csv
+0,8,32,4,RLISTA,pointcloud,923.734619140625,923.734619140625,0.072474181652069,56.25,knot_denisty_results/sweep_reg_weight_4/4_8_32_w=1e-4_0e85/parameters.csv
+0,8,32,4,RLISTA,pointcloud,916.3798828125,916.3798828125,0.0772416889667511,53.7109375,knot_denisty_results/sweep_reg_weight_4/4_8_32_w=5e-4_4ca6/parameters.csv
+0,8,32,4,RLISTA,pointcloud,923.734619140625,923.734619140625,0.072474181652069,56.25,knot_denisty_results/sweep_reg_weight_4/4_8_32_w=8e-5_4808/parameters.csv
+0,8,32,4,RLISTA,pointcloud,916.3798828125,916.3798828125,0.0772416889667511,53.7109375,knot_denisty_results/sweep_reg_weight_4/4_8_32_w=2e-4_a2a5/parameters.csv
+0,8,32,4,RLISTA,pointcloud,916.3798828125,916.3798828125,0.0772416889667511,53.7109375,knot_denisty_results/sweep_reg_weight_4/4_8_32_w=4e-4_a3b2/parameters.csv
+0,8,32,4,RLISTA,pointcloud,923.734619140625,923.734619140625,0.072474181652069,56.25,knot_denisty_results/sweep_reg_weight_4/4_8_32_w=7e-5_a542/parameters.csv

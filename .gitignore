@@ -4,3 +4,9 @@ interesting_results/
 hyperplane_analysis_figures/
 .vscode/
 docker_run.sh
+wandb/
+*.png
+*.pdf
+model_analysis/
+output/
+cache/

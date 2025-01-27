@@ -1,13 +1,13 @@
 #!/bin/bash
-sweep_name=x_perturbed_3
-configs_dir=configs/x_perturbed_3
-results_dir=knot_denisty_results/x_perturbed_3
+sweep_name=sweep_reg_weight_4
+configs_dir=configs/sweep_reg_weight_4
+results_dir=knot_denisty_results/sweep_reg_weight_4
 id=$(date '+%Y-%m-%d_%H:%M:%S')
 
 echo "Running sweep ${sweep_name} with id ${id}"
 
 for config_path in "$configs_dir"/*.yaml; do 
-    python main.py --config=$config_path --model_types ISTA FISTA LISTA RLISTA
+    python main.py --config=$config_path --model_types RLISTA
 done
 
 python generate_table_from_results.py \

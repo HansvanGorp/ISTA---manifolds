@@ -1,0 +1,124 @@
+---
+# this yaml file contains the settings used for the knot density experiment
+
+# general parameters
+device: "cuda:0" # device to run the experiment on
+results_dir: "for_paper"
+seed: 2 # seed for reproducibility
+max_nr_of_experiments: 3 # maximum number of experiments to run
+A_with_good_singular_values: False # bool to decide if we want to generate A with good singular values or just randomly
+A_is_identity: False
+A_is_convolution: False
+
+# we want to run the experiment in different contexts of dimension sizes and sparsity levels of x
+# y dimension M, x dimension N, sparsity in x of K, each described by a range
+# we also have some noise in the data according to y=Ax+noise with the noise~N(0, noise_std**2)
+data_that_varies:
+  K:
+    min: 3 #2
+    max: 3 #2
+  M:
+    min: 8 #5
+    max: 8 #5
+  N:
+    min: 24 #10
+    max: 24 #10
+
+data_that_stays_constant:
+  x_magnitude: [1, 2]
+  noise_std: 0.01
+  nr_training_samples:   1024 # 10 # 8192
+  nr_validation_samples: 1024 # 5 # 1024
+  nr_test_samples:       1024 # 5 # 1024
+  test_distribution_shift_epsilon: 0.0
+  
+# ISTA parameters
+ISTA:
+  nr_folds: 1024
+  mu:
+    min: 0.01
+    max: 2
+    nr_points: 5
+  lambda:
+    min: 0.01 # 0.01
+    max: 1
+    nr_points: 5
+  l1_weight: 0.0
+  l2_weight: 1.0
+
+# FISTA parameters
+FISTA:
+  nr_folds: 128
+  mu:
+    min: 0.01
+    max: 2
+    nr_points: 5
+  lambda:
+    min: 0.01 # 0.01
+    max: 1
+    nr_points: 5
+  l1_weight: 0.0
+  l2_weight: 1.0
+
+# LISTA parameters (Learned ISTA)
+LISTA:
+  nr_folds: 20
+  batch_size: 64
+  nr_of_epochs: 100
+  learning_rate: 0.001
+  patience: 20
+  initial_mu: 1.0
+  initial_lambda: 0.05
+  share_weights: False
+  l1_weight: 1.0
+  l2_weight: 0.0
+
+# RLISTA parameters (Regularized - Learned - ISTA)
+RLISTA:
+  nr_folds: 128
+  batch_size: 64
+  nr_of_epochs: 100
+  learning_rate: 0.001
+  patience: 5
+  initial_mu: 1.0
+  initial_lambda: 0.05
+  share_weights: False
+  l1_weight: 0.0
+  l2_weight: 1.0
+  regularization:
+    nr_paths: 1
+    anchor_point_std: 1
+    nr_points_along_path: 1024 # 2^9  , 2^14
+    cloud_scale: 11
+    path_delta: 0.01           # 0.01 , 0.001
+    type: 'pointcloud' # pointcloud # smooth_jacobian, or tie_weights, or tv_jacobian
+    weight: 0.85          # 0.01           , or 2          , or 100
+    N_points: 60
+    num_clouds: 8
+    input_sampling: True
+
+# Path parameters
+Path:
+  nr_paths: 10 # number of paths to generate
+  anchor_point_std: 1 # standard deviation of the anchor points, where the path will bounce between
+  nr_points_along_path: 524288 #= 2^19
+  path_delta: 0.001
+
+# hyperplane parameters
+Hyperplane:
+  enabled: True # bool to decide if we want to perform the hyperplane experiment
+  nr_points_along_axis: 1024 # number of points to sample along the axis
+  indices_of_projection: [~,0,1] # The indices of the anchor points, aka, which k-sparse vector to project onto. 
+                                 #A none means the origin, a 0 means x=[1,0,0,0,..] and a 1 means x=[0,1,0,0,..], and so on.
+                                 # for now, this only support with None always as the first element
+  anchor_on_y_instead: False # bool to decide if we want to plot the raw y instead of the plane indices -> note that plot_data_regions should be False if this is True
+  magnitude: 2       # the magnitude to choose for the first anchor points, ie, x = x * magnitude
+  margin: 0.25        # the additional margin to extend the hyperplane by
+  symmetric: False   # bool to decide if we want to make the hyperplane symmetric
+  only_positive: False # bool to decide if we only want to plot the positve part of the data
+  tolerance: ~       # the minimum difference in values of the jacobian to consider. If ~, uses machine precision
+  draw_decision_boundary: False # bool to decide if we want to draw the decision boundary
+  plot_data_regions: True # bool tpo decide if we want to plot the data regions
+  data_region_extend: [0.5, 1.5] # the extend of the data region, ie, the range of the data
+  K: 1              # the sparsity level of the data to consider for plotting
+  make_gif: True     # bool to decide if we want to make a gif of the hyperplane experiment

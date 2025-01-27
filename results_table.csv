@@ -1,0 +1,14 @@
+Unnamed: 0,M,N,K,RLISTA_knot_density_max,RLISTA_knot_density_end,RLISTA_test_loss_end,RLISTA_test_accuracy_end,path,LISTA_knot_density_max,LISTA_knot_density_end,LISTA_test_loss_end,LISTA_test_accuracy_end
+0,2,3,2,13.013838768005373,13.013838768005373,0.8503476977348328,0.0,knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192_t2/parameters.csv,,,,
+0,2,3,2,23.933408737182617,23.933408737182617,0.810124933719635,2.1484375,knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192_t6/parameters.csv,,,,
+0,2,3,2,12.895583152770996,12.895583152770996,0.8499020934104919,0.0,knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192_t3/parameters.csv,,,,
+0,2,3,2,20.961759567260746,20.961759567260746,1.211845636367798,5.95703125,knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192_t5/parameters.csv,,,,
+0,2,3,2,12.683867454528809,12.683867454528809,0.8507175445556641,0.0,knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192_t/parameters.csv,,,,
+0,2,3,2,113.23355865478516,113.23355865478516,0.4521626234054565,36.1328125,knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192/c43c73f1-1ca5-4d04-8dcd-e6bd45d4c037/parameters.csv,,,,
+0,2,3,2,6.885528087615967,3.6373136043548575,1.80615496635437,3.02734375,knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192_t4/parameters.csv,174.74935913085938,173.04800415039062,0.3249104619026184,58.984375
+0,2,3,2,99.01618194580078,99.01618194580078,0.5054025650024414,14.55078125,knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192_sweep_1/282b9dfa-ac0d-4de4-985c-d7f1d23eb4ac/parameters.csv,,,,
+0,2,3,2,93.6946792602539,93.6946792602539,0.4849246740341186,20.80078125,knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192_sweep_1/5a61094b-223d-4706-8af9-efa1418cb212/parameters.csv,,,,
+0,2,3,2,43.10416793823242,43.06792831420898,0.779118001461029,5.17578125,knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192_sweep_1/8f1e2a49-c565-4f73-95e9-8f1f07a8260f/parameters.csv,,,,
+0,2,3,2,108.65973663330078,108.65973663330078,0.455820083618164,50.68359375,knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192_sweep_1/20c81c66-124e-49a5-836e-808bfb0611fc/parameters.csv,,,,
+0,2,3,2,17.63916015625,17.63916015625,0.8083375692367554,2.1484375,knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192_sweep_1/ce9145d7-1bb4-4719-817b-d2b32d9be543/parameters.csv,,,,
+0,2,3,2,43.56956100463867,43.56956100463867,0.8135216236114502,3.125,knot_denisty_results/test_L2_loss_M2_N3_nrtrain_8192_sweep_1/2460895f-954b-46fc-8b80-1bbf666bb89f/parameters.csv,,,,

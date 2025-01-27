@@ -3,7 +3,7 @@
 
 # general parameters
 device: "cuda:0" # device to run the experiment on
-results_dir: "review_response"
+results_dir: "main_experiments"
 seed: 2 # seed for reproducibility
 max_nr_of_experiments: 3 # maximum number of experiments to run
 A_with_good_singular_values: False # bool to decide if we want to generate A with good singular values or just randomly
